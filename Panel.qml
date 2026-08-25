@@ -64,7 +64,7 @@ Item {
   property int currentTab: 0
   property string agendaFilter: "all"
   property string newMissionTitle: ""
-  property string newMissionPriority: "high"
+  property string newMissionPriority: "alpha"
 
   // Telemetry FileViews
   FileView {
@@ -255,7 +255,7 @@ Item {
     bar: root.bar
     open: root.opened
     contentWidth: Style.space(510)
-    contentHeight: Style.space(590)
+    contentHeight: Style.space(580)
 
     ColumnLayout {
       anchors.fill: parent
@@ -321,10 +321,10 @@ Item {
               }
             }
 
-            // Callsign pill badge
+            // Callsign pill badge (Click to edit)
             Rectangle {
               height: Style.space(18)
-              implicitWidth: callSignTxt.implicitWidth + Style.space(10)
+              implicitWidth: callSignTxt.implicitWidth + Style.space(12)
               radius: Style.space(4)
               color: Color.background
               border.color: Color.accent
@@ -333,7 +333,7 @@ Item {
               Text {
                 id: callSignTxt
                 anchors.centerIn: parent
-                text: "👤 " + root.callSign
+                text: root.callSign
                 font.family: Style.font.family
                 font.pixelSize: Style.font.caption
                 font.bold: true
@@ -350,8 +350,8 @@ Item {
 
           Text {
             text: (root.hostWidget && root.hostWidget.timerRunning)
-              ? "⚡ SURVEILLANCE ACTIVE — " + Storage.formatTime(root.hostWidget.timeRemaining)
-              : "Gotham Tactical Terminal // Detective " + root.callSign
+              ? "SURVEILLANCE ACTIVE — " + Storage.formatTime(root.hostWidget.timeRemaining)
+              : "Gotham Tactical Terminal // " + root.callSign
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
             color: (root.hostWidget && root.hostWidget.timerRunning) ? Color.accent : Color.muted
@@ -485,19 +485,13 @@ Item {
         }
       }
 
-      // ── Tab Bar Navigation ────────────────────────────────────────────────
+      // ── Tab Bar Navigation (Minimal & Theme-Oriented) ──────────────────────
       RowLayout {
         Layout.fillWidth: true
         spacing: Style.space(4)
 
         Repeater {
-          model: [
-            { name: "Patrol", icon: "⏱" },
-            { name: "Cases", icon: "📂" },
-            { name: "Forensics", icon: "📜" },
-            { name: "Alfred Comms", icon: "🎙" },
-            { name: "Batcave Ops", icon: "⚡" }
-          ]
+          model: ["Patrol", "Cases", "Forensics", "Alfred", "Operations"]
           delegate: Rectangle {
             Layout.fillWidth: true
             height: Style.space(30)
@@ -506,21 +500,13 @@ Item {
             border.color: root.currentTab === index ? Color.accent : Color.muted
             border.width: 1
 
-            RowLayout {
+            Text {
               anchors.centerIn: parent
-              spacing: Style.space(4)
-
-              Text {
-                text: modelData.icon
-                font.pixelSize: Style.font.caption
-              }
-              Text {
-                text: modelData.name
-                font.family: Style.font.family
-                font.pixelSize: Style.font.caption
-                font.bold: root.currentTab === index
-                color: root.currentTab === index ? Color.background : Color.foreground
-              }
+              text: modelData
+              font.family: Style.font.family
+              font.pixelSize: Style.font.caption
+              font.bold: root.currentTab === index
+              color: root.currentTab === index ? Color.background : Color.foreground
             }
 
             MouseArea {
@@ -645,7 +631,7 @@ Item {
 
               Text {
                 anchors.centerIn: parent
-                text: (root.hostWidget && root.hostWidget.timerRunning) ? "⏸  PAUSE PATROL" : "▶  COMMENCE PATROL"
+                text: (root.hostWidget && root.hostWidget.timerRunning) ? "PAUSE PATROL" : "COMMENCE PATROL"
                 font.family: Style.font.family
                 font.bold: true
                 font.pixelSize: Style.font.body
@@ -668,7 +654,7 @@ Item {
 
               Text {
                 anchors.centerIn: parent
-                text: "↺  Reset"
+                text: "Reset"
                 font.family: Style.font.family
                 font.pixelSize: Style.font.body
                 color: Color.foreground
@@ -1047,7 +1033,7 @@ Item {
             Layout.fillWidth: true
 
             Text {
-              text: "FORENSIC LOG SIZE: " + (noteArea ? noteArea.text.length : 0) + " BYTES"
+              text: "FORENSIC LOG: " + (noteArea ? noteArea.text.length : 0) + " BYTES"
               font.family: Style.font.family
               font.pixelSize: 9
               font.bold: true
@@ -1060,11 +1046,11 @@ Item {
               height: Style.space(34)
               radius: Style.space(4)
               color: Color.accent
-              implicitWidth: Style.space(130)
+              implicitWidth: Style.space(120)
 
               Text {
                 anchors.centerIn: parent
-                text: "💾  Save Dossier"
+                text: "Save Dossier"
                 font.family: Style.font.family
                 font.pixelSize: Style.font.body
                 font.bold: true
@@ -1129,17 +1115,13 @@ Item {
             border.color: Color.accent
             border.width: 1
 
-            RowLayout {
+            Text {
               anchors.centerIn: parent
-              spacing: 6
-              Text { text: "🎙"; font.pixelSize: Style.font.body }
-              Text {
-                text: "Request Tactical Briefing from Alfred"
-                font.family: Style.font.family
-                font.pixelSize: Style.font.body
-                font.bold: true
-                color: Color.accent
-              }
+              text: "Request Tactical Briefing from Alfred"
+              font.family: Style.font.family
+              font.pixelSize: Style.font.body
+              font.bold: true
+              color: Color.accent
             }
 
             MouseArea {
@@ -1208,12 +1190,12 @@ Item {
 
             Repeater {
               model: [
-                { label: "🔒  Batcave Lockdown",  cmd: ["omarchy", "system", "lock"] },
-                { label: "🌙  Gotham Night Light", cmd: ["omarchy", "toggle", "nightlight"] },
-                { label: "📸  HUD Recon Capture",   cmd: ["omarchy", "capture", "screenshot"] },
-                { label: "🔇  Comms Silence",       cmd: ["bash", "-c", "pactl set-sink-mute @DEFAULT_SINK@ toggle"] },
-                { label: "🔄  Reboot Batcomputer",  cmd: ["omarchy", "restart", "shell"] },
-                { label: "⚡  Bat-Signal Beacon",   cmd: [] }
+                { label: "Batcave Lockdown",  cmd: ["omarchy", "system", "lock"] },
+                { label: "Night Light",       cmd: ["omarchy", "toggle", "nightlight"] },
+                { label: "Screenshot",        cmd: ["omarchy", "capture", "screenshot"] },
+                { label: "Toggle Mute",       cmd: ["bash", "-c", "pactl set-sink-mute @DEFAULT_SINK@ toggle"] },
+                { label: "Restart Shell",     cmd: ["omarchy", "restart", "shell"] },
+                { label: "Bat-Signal Mode",   cmd: [] }
               ]
               delegate: Rectangle {
                 Layout.fillWidth: true
@@ -1234,7 +1216,7 @@ Item {
                   anchors.fill: parent
                   cursorShape: Qt.PointingHandCursor
                   onClicked: {
-                    if (modelData.label.indexOf("Bat-Signal") >= 0) {
+                    if (modelData.label === "Bat-Signal Mode") {
                       if (root.hostWidget) root.hostWidget.batSignalActive = !root.hostWidget.batSignalActive
                     } else {
                       Quickshell.execDetached(modelData.cmd)
