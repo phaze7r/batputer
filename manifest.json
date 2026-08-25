@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "id": "batputer",
+  "name": "BatPuter",
+  "version": "2.0.0",
+  "author": "phaze7r",
+  "description": "Tactical Wayne Tech AI Assistant & Operations HUD for Master Wayne",
+  "kinds": ["bar-widget"],
+  "activation": "on-demand",
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "BatPuter AI Assistant",
+    "description": "Tactical AI assistant with Pomodoro Focus Timer, Mission Agenda, Notes, Alfred Check-in Prompts, and Quick Ops.",
+    "category": "AI",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "focusDuration": 25,
+      "breakDuration": 5,
+      "checkInIntervalMinutes": 30,
+      "enableCheckIns": true,
+      "soundAlerts": true
+    }
+  }
+}
