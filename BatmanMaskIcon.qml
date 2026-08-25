@@ -9,14 +9,22 @@ Item {
   property bool pulsing: false
   property color maskColor: Color.foreground
 
-  // Determine light vs dark
+  // Theme-aware detection:
+  // Light background (lum >= 0.5) -> black icon
+  // Dark background (lum < 0.5) -> white icon
   readonly property bool useWhiteIcon: {
-    var c = root.maskColor
-    if (!c) return true
     try {
-      var col = Qt.color(c)
-      var lum = 0.299 * col.r + 0.587 * col.g + 0.114 * col.b
-      return lum > 0.35
+      var bg = Color.background
+      var bgCol = Qt.color(bg)
+      var bgLum = 0.299 * bgCol.r + 0.587 * bgCol.g + 0.114 * bgCol.b
+      if (bgLum >= 0.5) return false
+
+      var fg = root.maskColor
+      var fgCol = Qt.color(fg)
+      var fgLum = 0.299 * fgCol.r + 0.587 * fgCol.g + 0.114 * fgCol.b
+      if (fgLum < 0.35) return false
+
+      return true
     } catch(e) {
       return true
     }

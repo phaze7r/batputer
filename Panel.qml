@@ -279,7 +279,7 @@ Item {
           BatmanMaskIcon {
             anchors.centerIn: parent
             iconSize: Style.space(28)
-            maskColor: Color.accent
+            maskColor: Color.foreground
             active: true
             pulsing: root.hostWidget ? root.hostWidget.timerRunning : false
           }
