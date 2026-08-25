@@ -254,7 +254,6 @@ Item {
     owner: root.barIdentity
     bar: root.bar
     open: root.opened
-    centerOnBar: true
     contentWidth: Style.space(510)
     contentHeight: Style.space(590)
 
