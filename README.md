@@ -7,7 +7,8 @@
 > **BatPuter** is a Gotham-themed tactical daily productivity HUD for the [Omarchy](https://omarchy.org) Linux desktop. Manage your daily agendas, organize tactical to-do lists, log forensic notes, and execute focused patrol sprints — all styled like the World's Greatest Detective's Batcave terminal.
 
 <p align="center">
-  <img src="assets/preview.png" alt="BatPuter HUD Preview" width="650">
+  <img src="assets/preview_dark.png" alt="BatPuter HUD Dark Theme" width="48%">
+  <img src="assets/preview_light.png" alt="BatPuter HUD Light Theme" width="48%">
 </p>
 
 ---
@@ -48,12 +49,12 @@
 
 ### Method 1: Via Omarchy CLI (Recommended)
 ```bash
-omarchy plugin add https://github.com/<your-username>/batputer.git --enable
+omarchy plugin add https://github.com/phaze7r/batputer.git --enable
 ```
 
 ### Method 2: Manual Clone
 ```bash
-git clone https://github.com/<your-username>/batputer.git ~/.config/omarchy/plugins/batputer
+git clone https://github.com/phaze7r/batputer.git ~/.config/omarchy/plugins/batputer
 omarchy restart shell
 ```
 
