@@ -110,15 +110,10 @@
 
 ## 📦 Installation
 
-### Method 1: Via Omarchy Plugin Manager (Recommended)
+Install directly via the Omarchy Plugin Manager:
+
 ```bash
 omarchy plugin add https://github.com/phaze7r/batputer.git --enable
-```
-
-### Method 2: Manual Clone
-```bash
-git clone https://github.com/phaze7r/batputer.git ~/.config/omarchy/plugins/batputer
-omarchy restart shell
 ```
 
 ---
