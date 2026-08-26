@@ -59,7 +59,7 @@ Item {
   property real lastRxBytes: 0
   property real lastTxBytes: 0
 
-  // Data models
+  // Data models with strict bounded fallbacks
   property var agendaList: []
   property var notesData: ({ activeTab: 0, tabs: [
     { title: "Daily Log", content: "# DAILY MISSION LOG\n- Status: All systems operational\n- Focus: Complete primary objectives." },
@@ -71,6 +71,51 @@ Item {
   property string newMissionTitle: ""
   property string newMissionPriority: "alpha"
 
+  // Secure File & Clipboard Process Writers (Data streams over stdin, never in process argv)
+  Process {
+    id: configSaver
+    property string payload: ""
+    command: ["tee", root.batputerDir + "/config.json"]
+    stdinEnabled: true
+    onStarted: {
+      write(payload)
+      payload = ""
+    }
+  }
+
+  Process {
+    id: agendaSaver
+    property string payload: ""
+    command: ["tee", root.batputerDir + "/agenda.json"]
+    stdinEnabled: true
+    onStarted: {
+      write(payload)
+      payload = ""
+    }
+  }
+
+  Process {
+    id: notesSaver
+    property string payload: ""
+    command: ["tee", root.batputerDir + "/notes.json"]
+    stdinEnabled: true
+    onStarted: {
+      write(payload)
+      payload = ""
+    }
+  }
+
+  Process {
+    id: clipboardCopyProcess
+    property string payload: ""
+    command: ["wl-copy"]
+    stdinEnabled: true
+    onStarted: {
+      write(payload)
+      payload = ""
+    }
+  }
+
   // Telemetry FileViews
   FileView {
     id: loadFile
@@ -79,7 +124,7 @@ Item {
     printErrors: false
     onLoaded: {
       var parts = text().trim().split(" ")
-      if (parts.length > 0) root.cpuLoad = parts[0]
+      if (parts.length > 0) root.cpuLoad = parts[0].substring(0, 10)
     }
   }
 
@@ -109,7 +154,7 @@ Item {
     printErrors: false
     onLoaded: {
       var t = text().trim()
-      if (t) root.diskUsage = t
+      if (t) root.diskUsage = t.substring(0, 20)
     }
   }
 
@@ -129,7 +174,8 @@ Item {
     watchChanges: true
     printErrors: false
     onLoaded: {
-      var d = Storage.parseJsonSafe(text(), null)
+      var raw = Storage.parseJsonSafe(text(), null, 32768)
+      var d = Storage.sanitizeConfig(raw)
       if (d && d.callSign) root.callSign = d.callSign
     }
   }
@@ -140,8 +186,8 @@ Item {
     watchChanges: true
     printErrors: false
     onLoaded: {
-      var data = Storage.parseJsonSafe(text(), [])
-      if (Array.isArray(data)) root.agendaList = data
+      var raw = Storage.parseJsonSafe(text(), [], 65536)
+      root.agendaList = Storage.sanitizeAgenda(raw)
     }
   }
 
@@ -151,13 +197,12 @@ Item {
     watchChanges: true
     printErrors: false
     onLoaded: {
-      var data = Storage.parseJsonSafe(text(), null)
-      if (data && data.tabs && data.tabs.length > 0) {
-        root.notesData = data
-        root.activeNoteTabIndex = Math.min(Math.max(0, data.activeTab || 0), data.tabs.length - 1)
-        if (noteArea && data.tabs[root.activeNoteTabIndex]) {
-          noteArea.text = data.tabs[root.activeNoteTabIndex].content || ""
-        }
+      var raw = Storage.parseJsonSafe(text(), null, 131072)
+      var data = Storage.sanitizeNotes(raw)
+      root.notesData = data
+      root.activeNoteTabIndex = Math.min(Math.max(0, data.activeTab || 0), data.tabs.length - 1)
+      if (noteArea && data.tabs[root.activeNoteTabIndex]) {
+        noteArea.text = data.tabs[root.activeNoteTabIndex].content || ""
       }
     }
   }
@@ -219,25 +264,29 @@ Item {
   }
 
   function saveConfig() {
-    var data = { callSign: root.callSign }
-    Quickshell.execDetached(["bash", "-c",
-      "printf '%s' '" + JSON.stringify(data).replace(/'/g, "'\\''") +
-      "' > '" + root.batputerDir + "/config.json'"])
+    var data = Storage.sanitizeConfig({
+      callSign: root.callSign,
+      sessionsCompleted: root.hostWidget ? root.hostWidget.sessionsCompleted : 0,
+      totalFocusSeconds: root.hostWidget ? root.hostWidget.totalFocusSeconds : 0,
+      streakDays: root.hostWidget ? root.hostWidget.streakDays : 1,
+      lastActiveDate: root.hostWidget ? root.hostWidget.lastActiveDate : ""
+    })
+    configSaver.payload = JSON.stringify(data, null, 2)
+    configSaver.running = true
   }
 
   function saveCurrentNote() {
     if (!noteArea) return
-    var data = root.notesData
+    var data = Storage.sanitizeNotes(root.notesData)
     if (!data || !data.tabs || data.tabs.length === 0) return
     if (!data.tabs[root.activeNoteTabIndex]) return
 
-    data.tabs[root.activeNoteTabIndex].content = noteArea.text
+    data.tabs[root.activeNoteTabIndex].content = noteArea.text.substring(0, 16384)
     data.activeTab = root.activeNoteTabIndex
     root.notesData = data
 
-    Quickshell.execDetached(["bash", "-c",
-      "printf '%s' '" + JSON.stringify(data).replace(/'/g, "'\\''") +
-      "' > '" + root.batputerDir + "/notes.json'"])
+    notesSaver.payload = JSON.stringify(data, null, 2)
+    notesSaver.running = true
   }
 
   function switchNoteTab(idx) {
@@ -249,9 +298,9 @@ Item {
   }
 
   function addMission() {
-    var title = root.newMissionTitle.trim()
+    var title = root.newMissionTitle.trim().substring(0, 140)
     if (!title) return
-    var list = root.agendaList.slice()
+    var list = root.agendaList.slice(0, 49)
     list.unshift({
       id: Date.now(),
       title: title,
@@ -260,9 +309,9 @@ Item {
       completed: false,
       created: new Date().toISOString().split("T")[0]
     })
-    root.agendaList = list
+    root.agendaList = Storage.sanitizeAgenda(list)
     root.newMissionTitle = ""
-    saveMissions(list)
+    saveMissions(root.agendaList)
   }
 
   function toggleMission(id) {
@@ -287,19 +336,19 @@ Item {
   }
 
   function saveMissions(list) {
-    Quickshell.execDetached(["bash", "-c",
-      "printf '%s' '" + JSON.stringify(list).replace(/'/g, "'\\''") +
-      "' > '" + root.batputerDir + "/agenda.json'"])
+    var cleanList = Storage.sanitizeAgenda(list)
+    agendaSaver.payload = JSON.stringify(cleanList, null, 2)
+    agendaSaver.running = true
   }
 
   function promoteNoteToCase() {
     if (!noteArea) return
     var txt = noteArea.text.trim()
     if (!txt) return
-    var firstLine = txt.split("\n")[0].replace(/^[#\-\*\s]+/, "").trim()
+    var firstLine = txt.split("\n")[0].replace(/^[#\-\*\s]+/, "").trim().substring(0, 140)
     if (!firstLine) firstLine = "Forensic Note Objective"
     
-    var list = root.agendaList.slice()
+    var list = root.agendaList.slice(0, 49)
     list.unshift({
       id: Date.now(),
       title: firstLine,
@@ -308,8 +357,8 @@ Item {
       completed: false,
       created: new Date().toISOString().split("T")[0]
     })
-    root.agendaList = list
-    saveMissions(list)
+    root.agendaList = Storage.sanitizeAgenda(list)
+    saveMissions(root.agendaList)
     root.currentTab = 1
     Quickshell.execDetached(["omarchy-notification-send", "Case Dossier Created", "Note promoted to active ALPHA case objective.", "-g", "󰢌"])
   }
@@ -323,9 +372,8 @@ Item {
       root.agendaList,
       root.notesData
     )
-    Quickshell.execDetached(["bash", "-c",
-      "printf '%s' '" + report.replace(/'/g, "'\\''") + "' | wl-copy"
-    ])
+    clipboardCopyProcess.payload = report
+    clipboardCopyProcess.running = true
     Quickshell.execDetached(["omarchy-notification-send", "Tactical Debrief Copied", "Daily standup report copied to clipboard.", "-g", "󰢌"])
   }
 
@@ -374,6 +422,7 @@ Item {
 
             Text {
               text: "BATPUTER"
+              textFormat: Text.PlainText
               font.family: Style.font.family
               font.pixelSize: Style.font.heading
               font.bold: true
@@ -395,6 +444,7 @@ Item {
                 Rectangle { width: 6; height: 6; radius: 3; color: "#30d158" }
                 Text {
                   text: "BATCAVE v3.0"
+                  textFormat: Text.PlainText
                   font.family: Style.font.family
                   font.pixelSize: 9
                   font.bold: true
@@ -416,6 +466,7 @@ Item {
                 id: callSignTxt
                 anchors.centerIn: parent
                 text: root.callSign
+                textFormat: Text.PlainText
                 font.family: Style.font.family
                 font.pixelSize: Style.font.caption
                 font.bold: true
@@ -442,6 +493,7 @@ Item {
                 id: streakTxt
                 anchors.centerIn: parent
                 text: "🔥 " + (root.hostWidget ? root.hostWidget.streakDays : 1) + "d Streak"
+                textFormat: Text.PlainText
                 font.family: Style.font.family
                 font.pixelSize: Style.font.caption
                 font.bold: true
@@ -454,6 +506,7 @@ Item {
             text: (root.hostWidget && root.hostWidget.timerRunning)
               ? "⚡ SURVEILLANCE ACTIVE — " + Storage.formatTime(root.hostWidget.timeRemaining)
               : Storage.getDetectiveRank(root.hostWidget ? root.hostWidget.sessionsCompleted : 0) + "  //  " + root.callSign
+            textFormat: Text.PlainText
             font.family: Style.font.family
             font.pixelSize: Style.font.bodySmall
             font.bold: true
@@ -472,6 +525,7 @@ Item {
 
         Text {
           text: "Detective Callsign:"
+          textFormat: Text.PlainText
           font.family: Style.font.family
           font.pixelSize: Style.font.bodySmall
           font.bold: true
@@ -486,6 +540,7 @@ Item {
           font.family: Style.font.family
           font.pixelSize: Style.font.body
           color: Color.foreground
+          maximumLength: 32
           background: Rectangle {
             radius: Style.space(4)
             color: Color.background
@@ -494,7 +549,7 @@ Item {
           }
           onAccepted: {
             if (text.trim() !== "") {
-              root.callSign = text.trim()
+              root.callSign = text.trim().substring(0, 32)
               root.saveConfig()
             }
             root.editingCallSign = false
@@ -510,6 +565,7 @@ Item {
           Text {
             anchors.centerIn: parent
             text: "Save"
+            textFormat: Text.PlainText
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
             font.bold: true
@@ -520,7 +576,7 @@ Item {
             cursorShape: Qt.PointingHandCursor
             onClicked: {
               if (callSignInput.text.trim() !== "") {
-                root.callSign = callSignInput.text.trim()
+                root.callSign = callSignInput.text.trim().substring(0, 32)
                 root.saveConfig()
               }
               root.editingCallSign = false
@@ -547,30 +603,30 @@ Item {
           // CPU
           RowLayout {
             spacing: 3
-            Text { text: "CPU"; font.family: Style.font.family; font.pixelSize: 10; font.bold: true; color: Color.muted }
-            Text { text: root.cpuLoad; font.family: Style.font.family; font.pixelSize: 11; font.bold: true; color: Color.accent }
+            Text { text: "CPU"; textFormat: Text.PlainText; font.family: Style.font.family; font.pixelSize: 10; font.bold: true; color: Color.muted }
+            Text { text: root.cpuLoad; textFormat: Text.PlainText; font.family: Style.font.family; font.pixelSize: 11; font.bold: true; color: Color.accent }
           }
 
           // RAM
           RowLayout {
             spacing: 3
-            Text { text: "RAM"; font.family: Style.font.family; font.pixelSize: 10; font.bold: true; color: Color.muted }
-            Text { text: root.memUsage; font.family: Style.font.family; font.pixelSize: 11; font.bold: true; color: Color.foreground }
+            Text { text: "RAM"; textFormat: Text.PlainText; font.family: Style.font.family; font.pixelSize: 10; font.bold: true; color: Color.muted }
+            Text { text: root.memUsage; textFormat: Text.PlainText; font.family: Style.font.family; font.pixelSize: 11; font.bold: true; color: Color.foreground }
           }
 
           // DISK
           RowLayout {
             spacing: 3
-            Text { text: "DISK"; font.family: Style.font.family; font.pixelSize: 10; font.bold: true; color: Color.muted }
-            Text { text: root.diskUsage; font.family: Style.font.family; font.pixelSize: 11; font.bold: true; color: Color.foreground }
+            Text { text: "DISK"; textFormat: Text.PlainText; font.family: Style.font.family; font.pixelSize: 10; font.bold: true; color: Color.muted }
+            Text { text: root.diskUsage; textFormat: Text.PlainText; font.family: Style.font.family; font.pixelSize: 11; font.bold: true; color: Color.foreground }
           }
 
           // NET DOWN / UP
           RowLayout {
             spacing: 3
-            Text { text: "NET"; font.family: Style.font.family; font.pixelSize: 10; font.bold: true; color: Color.muted }
-            Text { text: "↓ " + root.netDown; font.family: Style.font.family; font.pixelSize: 10; font.bold: true; color: "#30d158" }
-            Text { text: "↑ " + root.netUp; font.family: Style.font.family; font.pixelSize: 10; font.bold: true; color: Color.accent }
+            Text { text: "NET"; textFormat: Text.PlainText; font.family: Style.font.family; font.pixelSize: 10; font.bold: true; color: Color.muted }
+            Text { text: "↓ " + root.netDown; textFormat: Text.PlainText; font.family: Style.font.family; font.pixelSize: 10; font.bold: true; color: "#30d158" }
+            Text { text: "↑ " + root.netUp; textFormat: Text.PlainText; font.family: Style.font.family; font.pixelSize: 10; font.bold: true; color: Color.accent }
           }
 
           Item { Layout.fillWidth: true }
@@ -579,7 +635,7 @@ Item {
           RowLayout {
             spacing: 4
             Rectangle { width: 6; height: 6; radius: 3; color: "#30d158" }
-            Text { text: "LINK OK"; font.family: Style.font.family; font.pixelSize: 10; font.bold: true; color: "#30d158" }
+            Text { text: "LINK OK"; textFormat: Text.PlainText; font.family: Style.font.family; font.pixelSize: 10; font.bold: true; color: "#30d158" }
           }
         }
       }
@@ -611,10 +667,12 @@ Item {
 
               Text {
                 text: modelData.icon
+                textFormat: Text.PlainText
                 font.pixelSize: Style.font.caption
               }
               Text {
                 text: modelData.name
+                textFormat: Text.PlainText
                 font.family: Style.font.family
                 font.pixelSize: Style.font.bodySmall
                 font.bold: root.currentTab === index
@@ -672,6 +730,7 @@ Item {
               Text {
                 Layout.alignment: Qt.AlignHCenter
                 text: root.hostWidget ? Storage.formatTime(root.hostWidget.timeRemaining) : "25:00"
+                textFormat: Text.PlainText
                 font.family: Style.font.family
                 font.pixelSize: Style.font.display
                 font.bold: true
@@ -686,6 +745,7 @@ Item {
                   var modes = ["25m Focus", "50m Deep Work", "5m Rest", "15m Recharge"]
                   return modes[root.hostWidget.timerMode] || "Patrol Session"
                 }
+                textFormat: Text.PlainText
                 font.family: Style.font.family
                 font.pixelSize: Style.font.bodySmall
                 font.bold: true
@@ -717,6 +777,7 @@ Item {
                 Text {
                   anchors.centerIn: parent
                   text: modelData.label
+                  textFormat: Text.PlainText
                   font.family: Style.font.family
                   font.pixelSize: Style.font.caption
                   font.bold: true
@@ -752,6 +813,7 @@ Item {
               Text {
                 anchors.centerIn: parent
                 text: "- 5m"
+                textFormat: Text.PlainText
                 font.family: Style.font.family
                 font.pixelSize: Style.font.caption
                 font.bold: true
@@ -777,12 +839,14 @@ Item {
                 spacing: Style.space(6)
                 Text {
                   text: "Duration:"
+                  textFormat: Text.PlainText
                   font.family: Style.font.family
                   font.pixelSize: Style.font.caption
                   color: Color.muted
                 }
                 Text {
                   text: (root.hostWidget ? Math.round(root.hostWidget.totalDuration / 60) : 25) + " min"
+                  textFormat: Text.PlainText
                   font.family: Style.font.family
                   font.pixelSize: Style.font.caption
                   font.bold: true
@@ -802,6 +866,7 @@ Item {
               Text {
                 anchors.centerIn: parent
                 text: "+ 5m"
+                textFormat: Text.PlainText
                 font.family: Style.font.family
                 font.pixelSize: Style.font.caption
                 font.bold: true
@@ -830,6 +895,7 @@ Item {
               Text {
                 anchors.centerIn: parent
                 text: (root.hostWidget && root.hostWidget.timerRunning) ? "PAUSE PATROL" : "COMMENCE PATROL"
+                textFormat: Text.PlainText
                 font.family: Style.font.family
                 font.bold: true
                 font.pixelSize: Style.font.body
@@ -853,6 +919,7 @@ Item {
               Text {
                 anchors.centerIn: parent
                 text: "Reset"
+                textFormat: Text.PlainText
                 font.family: Style.font.family
                 font.pixelSize: Style.font.body
                 color: Color.foreground
@@ -877,9 +944,10 @@ Item {
             RowLayout {
               anchors.centerIn: parent
               spacing: Style.space(6)
-              Text { text: "📋"; font.pixelSize: Style.font.caption }
+              Text { text: "📋"; textFormat: Text.PlainText; font.pixelSize: Style.font.caption }
               Text {
                 text: "Export Daily Standup Debrief"
+                textFormat: Text.PlainText
                 font.family: Style.font.family
                 font.pixelSize: Style.font.caption
                 font.bold: true
@@ -916,6 +984,7 @@ Item {
               implicitHeight: Style.space(38)
               placeholderText: "Log new case objective / to-do..."
               text: root.newMissionTitle
+              maximumLength: 140
               onTextChanged: root.newMissionTitle = text
               onAccepted: root.addMission()
               font.family: Style.font.family
@@ -960,6 +1029,7 @@ Item {
                 leftPadding: Style.space(10)
                 rightPadding: Style.space(10)
                 text: priorityCombo.displayText
+                textFormat: Text.PlainText
                 font.family: Style.font.family
                 font.pixelSize: Style.font.caption
                 font.bold: true
@@ -979,6 +1049,7 @@ Item {
                 contentItem: Text {
                   leftPadding: Style.space(8)
                   text: modelData.text
+                  textFormat: Text.PlainText
                   font.family: Style.font.family
                   font.pixelSize: Style.font.caption
                   font.bold: true
@@ -1016,6 +1087,7 @@ Item {
               Text {
                 anchors.centerIn: parent
                 text: "+"
+                textFormat: Text.PlainText
                 font.family: Style.font.family
                 font.bold: true
                 font.pixelSize: Style.font.heading
@@ -1071,6 +1143,7 @@ Item {
                       id: threatTxt
                       anchors.centerIn: parent
                       text: Storage.priorityLabel(modelData.priority)
+                      textFormat: Text.PlainText
                       font.family: Style.font.family
                       font.pixelSize: 9
                       font.bold: true
@@ -1081,6 +1154,7 @@ Item {
                   Text {
                     Layout.fillWidth: true
                     text: modelData.title || modelData.text || ""
+                    textFormat: Text.PlainText
                     font.family: Style.font.family
                     font.pixelSize: Style.font.body
                     font.bold: true
@@ -1092,6 +1166,7 @@ Item {
                   // Resolve Case
                   Text {
                     text: modelData.completed ? "✓" : "○"
+                    textFormat: Text.PlainText
                     font.pixelSize: Style.font.heading
                     color: modelData.completed ? "#30d158" : Color.muted
                     MouseArea {
@@ -1113,6 +1188,7 @@ Item {
                     Text {
                       anchors.centerIn: parent
                       text: "Del"
+                      textFormat: Text.PlainText
                       font.family: Style.font.family
                       font.pixelSize: 9
                       color: Color.muted
@@ -1155,6 +1231,7 @@ Item {
                 Text {
                   anchors.centerIn: parent
                   text: modelData
+                  textFormat: Text.PlainText
                   font.family: Style.font.family
                   font.pixelSize: Style.font.bodySmall
                   font.bold: root.activeNoteTabIndex === index
@@ -1174,6 +1251,7 @@ Item {
             id: noteArea
             Layout.fillWidth: true
             Layout.fillHeight: true
+            textFormat: TextEdit.PlainText
             placeholderText: "Type notes, thoughts, tasks, code snippets here..."
             font.family: Style.font.family
             font.pixelSize: Style.font.body
@@ -1193,6 +1271,7 @@ Item {
 
             Text {
               text: (noteArea ? noteArea.text.length : 0) + " characters"
+              textFormat: Text.PlainText
               font.family: Style.font.family
               font.pixelSize: 10
               font.bold: true
@@ -1212,6 +1291,7 @@ Item {
               Text {
                 anchors.centerIn: parent
                 text: "Promote to Case"
+                textFormat: Text.PlainText
                 font.family: Style.font.family
                 font.pixelSize: Style.font.caption
                 font.bold: true
@@ -1233,6 +1313,7 @@ Item {
               Text {
                 anchors.centerIn: parent
                 text: "Save Note"
+                textFormat: Text.PlainText
                 font.family: Style.font.family
                 font.pixelSize: Style.font.caption
                 font.bold: true
@@ -1273,6 +1354,7 @@ Item {
                 Rectangle { width: 7; height: 7; radius: 3.5; color: "#30d158" }
                 Text {
                   text: "ALFRED PENNYWORTH // ENCRYPTED COMMS"
+                  textFormat: Text.PlainText
                   font.family: Style.font.family
                   font.bold: true
                   font.pixelSize: Style.font.bodySmall
@@ -1282,6 +1364,7 @@ Item {
 
               Text {
                 text: "Next scheduled briefing for " + root.callSign + " in: " + (root.hostWidget ? Storage.formatTime(root.hostWidget.checkInSecondsLeft) : "--:--")
+                textFormat: Text.PlainText
                 font.family: Style.font.family
                 font.pixelSize: Style.font.bodySmall
                 color: Color.foreground
@@ -1300,9 +1383,10 @@ Item {
             RowLayout {
               anchors.centerIn: parent
               spacing: Style.space(6)
-              Text { text: "🎙"; font.pixelSize: Style.font.body }
+              Text { text: "🎙"; textFormat: Text.PlainText; font.pixelSize: Style.font.body }
               Text {
                 text: "Request Tactical Briefing from Alfred"
+                textFormat: Text.PlainText
                 font.family: Style.font.family
                 font.pixelSize: Style.font.body
                 font.bold: true
@@ -1332,6 +1416,7 @@ Item {
 
               Text {
                 text: "ALFRED'S DIRECTIVE:"
+                textFormat: Text.PlainText
                 font.family: Style.font.family
                 font.pixelSize: 10
                 font.bold: true
@@ -1341,6 +1426,7 @@ Item {
               Text {
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
+                textFormat: Text.PlainText
                 text: "“Remember, " + root.callSign + ", the mind is your sharpest batarang. Periodic tactical pauses prevent forensic fatigue and sharpen your deduction.”"
                 font.family: Style.font.family
                 font.pixelSize: Style.font.body
@@ -1377,9 +1463,10 @@ Item {
               RowLayout {
                 Layout.fillWidth: true
                 spacing: 6
-                Text { text: "📊"; font.pixelSize: Style.font.caption }
+                Text { text: "📊"; textFormat: Text.PlainText; font.pixelSize: Style.font.caption }
                 Text {
                   text: "TODAY'S MISSION DASHBOARD"
+                  textFormat: Text.PlainText
                   font.family: Style.font.family
                   font.bold: true
                   font.pixelSize: Style.font.caption
@@ -1388,6 +1475,7 @@ Item {
                 Item { Layout.fillWidth: true }
                 Text {
                   text: Storage.getDetectiveRank(root.hostWidget ? root.hostWidget.sessionsCompleted : 0)
+                  textFormat: Text.PlainText
                   font.family: Style.font.family
                   font.bold: true
                   font.pixelSize: 10
@@ -1402,6 +1490,7 @@ Item {
 
                 Text {
                   text: "Case Files:"
+                  textFormat: Text.PlainText
                   font.family: Style.font.family
                   font.pixelSize: Style.font.bodySmall
                   font.bold: true
@@ -1412,6 +1501,7 @@ Item {
                   readonly property int activeCount: root.agendaList.filter(function(it){ return !it.completed }).length
                   readonly property int resolvedCount: root.agendaList.filter(function(it){ return it.completed }).length
                   text: activeCount + " Active  •  " + resolvedCount + " Resolved"
+                  textFormat: Text.PlainText
                   font.family: Style.font.family
                   font.pixelSize: Style.font.bodySmall
                   font.bold: true
@@ -1431,6 +1521,7 @@ Item {
                   Text {
                     anchors.centerIn: parent
                     text: "Clear Done"
+                    textFormat: Text.PlainText
                     font.family: Style.font.family
                     font.pixelSize: 9
                     font.bold: true
@@ -1451,6 +1542,7 @@ Item {
 
                 Text {
                   text: "Patrol Time:"
+                  textFormat: Text.PlainText
                   font.family: Style.font.family
                   font.pixelSize: Style.font.bodySmall
                   font.bold: true
@@ -1459,6 +1551,7 @@ Item {
 
                 Text {
                   text: Storage.formatDuration(root.hostWidget ? root.hostWidget.totalFocusSeconds : 0) + " (" + (root.hostWidget ? root.hostWidget.sessionsCompleted : 0) + " missions)"
+                  textFormat: Text.PlainText
                   font.family: Style.font.family
                   font.pixelSize: Style.font.bodySmall
                   font.bold: true
@@ -1476,6 +1569,7 @@ Item {
                   Text {
                     anchors.centerIn: parent
                     text: "Copy Standup"
+                    textFormat: Text.PlainText
                     font.family: Style.font.family
                     font.pixelSize: 9
                     font.bold: true
@@ -1494,6 +1588,7 @@ Item {
           // ── Tactical System Controls ──────────────────────────────────────
           Text {
             text: "Tactical System Controls"
+            textFormat: Text.PlainText
             font.family: Style.font.family
             font.bold: true
             font.pixelSize: Style.font.bodySmall
@@ -1518,9 +1613,10 @@ Item {
               RowLayout {
                 anchors.centerIn: parent
                 spacing: 6
-                Text { text: "⚡"; font.pixelSize: Style.font.body }
+                Text { text: "⚡"; textFormat: Text.PlainText; font.pixelSize: Style.font.body }
                 Text {
                   text: "Bat-Signal Mode"
+                  textFormat: Text.PlainText
                   font.family: Style.font.family
                   font.pixelSize: Style.font.bodySmall
                   font.bold: true
@@ -1548,9 +1644,10 @@ Item {
               RowLayout {
                 anchors.centerIn: parent
                 spacing: 6
-                Text { text: "🔇"; font.pixelSize: Style.font.body }
+                Text { text: "🔇"; textFormat: Text.PlainText; font.pixelSize: Style.font.body }
                 Text {
                   text: "Toggle Mute"
+                  textFormat: Text.PlainText
                   font.family: Style.font.family
                   font.pixelSize: Style.font.bodySmall
                   font.bold: true
@@ -1579,9 +1676,10 @@ Item {
               RowLayout {
                 anchors.centerIn: parent
                 spacing: 6
-                Text { text: "🌙"; font.pixelSize: Style.font.body }
+                Text { text: "🌙"; textFormat: Text.PlainText; font.pixelSize: Style.font.body }
                 Text {
                   text: "Night Light"
+                  textFormat: Text.PlainText
                   font.family: Style.font.family
                   font.pixelSize: Style.font.bodySmall
                   font.bold: true
@@ -1610,9 +1708,10 @@ Item {
               RowLayout {
                 anchors.centerIn: parent
                 spacing: 6
-                Text { text: "📸"; font.pixelSize: Style.font.body }
+                Text { text: "📸"; textFormat: Text.PlainText; font.pixelSize: Style.font.body }
                 Text {
                   text: "Screenshot"
+                  textFormat: Text.PlainText
                   font.family: Style.font.family
                   font.pixelSize: Style.font.bodySmall
                   font.bold: true
@@ -1641,9 +1740,10 @@ Item {
               RowLayout {
                 anchors.centerIn: parent
                 spacing: 6
-                Text { text: "🔒"; font.pixelSize: Style.font.body }
+                Text { text: "🔒"; textFormat: Text.PlainText; font.pixelSize: Style.font.body }
                 Text {
                   text: "Lock Screen"
+                  textFormat: Text.PlainText
                   font.family: Style.font.family
                   font.pixelSize: Style.font.bodySmall
                   font.bold: true
@@ -1672,9 +1772,10 @@ Item {
               RowLayout {
                 anchors.centerIn: parent
                 spacing: 6
-                Text { text: "🔄"; font.pixelSize: Style.font.body }
+                Text { text: "🔄"; textFormat: Text.PlainText; font.pixelSize: Style.font.body }
                 Text {
                   text: "Reload Shell"
+                  textFormat: Text.PlainText
                   font.family: Style.font.family
                   font.pixelSize: Style.font.bodySmall
                   font.bold: true

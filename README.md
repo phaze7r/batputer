@@ -162,8 +162,11 @@ batputer/
 
 ## 🗑 Uninstallation
 
+To remove the plugin and clean up user state data:
+
 ```bash
 omarchy plugin remove batputer
+rm -rf ~/.config/omarchy/batputer
 omarchy restart shell
 ```
 

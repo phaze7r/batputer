@@ -29,35 +29,48 @@ BarWidget {
   property int checkInIntervalMinutes: 30
   property int checkInSecondsLeft: 30 * 60
 
+  readonly property string home: Quickshell.env("HOME") || ""
+  readonly property string batputerDir: home + "/.config/omarchy/batputer"
+
   FileView {
     id: configFile
-    path: (Quickshell.env("HOME") || "") + "/.config/omarchy/batputer/config.json"
+    path: root.batputerDir + "/config.json"
     watchChanges: true
     printErrors: false
     onLoaded: {
-      var d = Storage.parseJsonSafe(text(), null)
-      if (d) {
-        if (d.callSign) root.callSign = d.callSign
-        if (d.sessionsCompleted) root.sessionsCompleted = d.sessionsCompleted
-        if (d.totalFocusSeconds) root.totalFocusSeconds = d.totalFocusSeconds
-        if (d.streakDays) root.streakDays = d.streakDays
-        if (d.lastActiveDate) root.lastActiveDate = d.lastActiveDate
-      }
+      var raw = Storage.parseJsonSafe(text(), null, 32768)
+      var d = Storage.sanitizeConfig(raw)
+      root.callSign = d.callSign
+      root.sessionsCompleted = d.sessionsCompleted
+      root.totalFocusSeconds = d.totalFocusSeconds
+      root.streakDays = d.streakDays
+      root.lastActiveDate = d.lastActiveDate
       root.checkStreak()
     }
   }
 
+  // Secure Process Writer (Passes data over stdin, never in process argv)
+  Process {
+    id: configSaver
+    property string payload: ""
+    command: ["tee", root.batputerDir + "/config.json"]
+    stdinEnabled: true
+    onStarted: {
+      write(payload)
+      payload = ""
+    }
+  }
+
   function saveConfig() {
-    var data = {
+    var data = Storage.sanitizeConfig({
       callSign: root.callSign,
       sessionsCompleted: root.sessionsCompleted,
       totalFocusSeconds: root.totalFocusSeconds,
       streakDays: root.streakDays,
       lastActiveDate: root.lastActiveDate
-    }
-    Quickshell.execDetached(["bash", "-c",
-      "printf '%s' '" + JSON.stringify(data).replace(/'/g, "'\\''") +
-      "' > '" + (Quickshell.env("HOME") || "") + "/.config/omarchy/batputer/config.json'"])
+    })
+    configSaver.payload = JSON.stringify(data, null, 2)
+    configSaver.running = true
   }
 
   function checkStreak() {
@@ -108,7 +121,7 @@ BarWidget {
   function toggleBatSignal() {
     batSignalActive = !batSignalActive
     if (batSignalActive) {
-      Quickshell.execDetached(["pw-play", "/home/phaze7r/.config/omarchy/plugins/batputer/assets/bat_finish.wav"])
+      Quickshell.execDetached(["pw-play", root.home + "/.config/omarchy/plugins/batputer/assets/bat_finish.wav"])
       Quickshell.execDetached(["omarchy-notification-send", "Bat-Signal Activated", "Gotham beacon searchlight illuminated.", "-g", "󰢌"])
     } else {
       Quickshell.execDetached(["omarchy-notification-send", "Bat-Signal Standby", "Beacon returned to passive surveillance.", "-g", "󰢌"])
@@ -163,8 +176,7 @@ BarWidget {
 
   function onTimerFinished() {
     timerRunning = false
-    // Play Wayne Tech chime
-    Quickshell.execDetached(["pw-play", "/home/phaze7r/.config/omarchy/plugins/batputer/assets/bat_finish.wav"])
+    Quickshell.execDetached(["pw-play", root.home + "/.config/omarchy/plugins/batputer/assets/bat_finish.wav"])
 
     if (timerMode === 0 || timerMode === 1 || timerMode === -1) {
       sessionsCompleted++
@@ -172,10 +184,10 @@ BarWidget {
       root.checkStreak()
       root.saveConfig()
       Quickshell.execDetached(["omarchy-notification-send", "BatPuter Focus Complete", "Patrol complete, " + root.callSign + ". Rank: " + Storage.getDetectiveRank(root.sessionsCompleted) + ". Take a tactical break.", "-g", "󰢌"])
-      setTimerDuration(2) // switch to short break
+      setTimerDuration(2)
     } else {
       Quickshell.execDetached(["omarchy-notification-send", "BatPuter Break Finished", "Break concluded. Ready for next objective, " + root.callSign + "?", "-g", "󰢌"])
-      setTimerDuration(0) // switch to focus
+      setTimerDuration(0)
     }
   }
 
@@ -263,14 +275,12 @@ BarWidget {
           var radius = (width / 2) - 1.5
           var progress = (root.totalDuration > 0) ? (root.timeRemaining / root.totalDuration) : 0
 
-          // Background track
           ctx.beginPath()
           ctx.arc(cx, cy, radius, 0, 2 * Math.PI)
           ctx.strokeStyle = Qt.rgba(button.foreground.r, button.foreground.g, button.foreground.b, 0.2)
           ctx.lineWidth = 1.8
           ctx.stroke()
 
-          // Active progress arc
           if (progress > 0) {
             ctx.beginPath()
             var startAngle = -Math.PI / 2
