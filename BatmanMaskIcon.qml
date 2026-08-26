@@ -10,19 +10,21 @@ Item {
   property bool batSignalActive: false
   property color maskColor: Color.foreground
 
+  // Theme-aware detection:
+  // Light bar / light surface (fg is dark, lum < 0.5) -> Solid Black Cowl
+  // Dark bar / dark surface (fg is light, lum >= 0.5) -> Solid White Cowl
   readonly property bool useWhiteIcon: {
     try {
-      var bg = Color.background
-      var bgCol = Qt.color(bg)
-      var bgLum = 0.299 * bgCol.r + 0.587 * bgCol.g + 0.114 * bgCol.b
-      if (bgLum >= 0.5) return false
-
       var fg = root.maskColor
       var fgCol = Qt.color(fg)
       var fgLum = 0.299 * fgCol.r + 0.587 * fgCol.g + 0.114 * fgCol.b
-      if (fgLum < 0.35) return false
+      if (fgLum >= 0.5) return true
+      if (fgLum < 0.5) return false
 
-      return true
+      var bg = Color.background
+      var bgCol = Qt.color(bg)
+      var bgLum = 0.299 * bgCol.r + 0.587 * bgCol.g + 0.114 * bgCol.b
+      return (bgLum < 0.5)
     } catch(e) {
       return true
     }

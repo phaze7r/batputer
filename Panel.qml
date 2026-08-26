@@ -384,7 +384,7 @@ Item {
     bar: root.bar
     open: root.opened
     contentWidth: Style.space(520)
-    contentHeight: Style.space(590)
+    contentHeight: Style.space(610)
 
     ColumnLayout {
       anchors.fill: parent
@@ -700,57 +700,126 @@ Item {
         ColumnLayout {
           visible: root.currentTab === 0
           anchors.fill: parent
-          spacing: Style.space(10)
+          spacing: Style.space(12)
 
-          // Radar-style circular timer
-          Rectangle {
+          // ── Large Minimal Wayne Tech Sonar Chronometer ──────────────────
+          Item {
             Layout.alignment: Qt.AlignHCenter
-            width: Style.space(136)
-            height: Style.space(136)
-            radius: width / 2
-            color: Color.background
-            border.color: (root.hostWidget && root.hostWidget.timerRunning) ? Color.accent : Color.muted
-            border.width: 2
+            width: Style.space(185)
+            height: Style.space(185)
 
-            Rectangle {
-              anchors.centerIn: parent
-              width: parent.width - Style.space(16)
-              height: parent.height - Style.space(16)
-              radius: width / 2
-              color: "transparent"
-              border.color: Color.accent
-              border.width: 1
-              opacity: (root.hostWidget && root.hostWidget.timerRunning) ? 0.6 : 0.2
+            Canvas {
+              id: sonarCanvas
+              anchors.fill: parent
+
+              onPaint: {
+                var ctx = getContext("2d")
+                ctx.reset()
+                var cx = width / 2
+                var cy = height / 2
+                var radius = (width / 2) - 6
+                var progress = (root.hostWidget && root.hostWidget.totalDuration > 0)
+                  ? (root.hostWidget.timeRemaining / root.hostWidget.totalDuration)
+                  : 1.0
+
+                var isBreak = root.hostWidget && (root.hostWidget.timerMode === 2 || root.hostWidget.timerMode === 3)
+                var arcColor = isBreak ? "#30d158" : Color.accent
+
+                // 1. Draw 12 Military Chrono Ticks
+                for (var i = 0; i < 12; i++) {
+                  var angle = (i * 30) * Math.PI / 180
+                  var isMajor = (i % 3 === 0)
+                  var tickLen = isMajor ? 6.5 : 3.5
+                  var rInner = radius - tickLen
+                  var rOuter = radius + 1
+
+                  ctx.beginPath()
+                  ctx.moveTo(cx + rInner * Math.cos(angle), cy + rInner * Math.sin(angle))
+                  ctx.lineTo(cx + rOuter * Math.cos(angle), cy + rOuter * Math.sin(angle))
+                  ctx.strokeStyle = isMajor ? Color.muted : Qt.rgba(Color.muted.r, Color.muted.g, Color.muted.b, 0.4)
+                  ctx.lineWidth = isMajor ? 1.5 : 1.0
+                  ctx.stroke()
+                }
+
+                // 2. Background Track Ring
+                ctx.beginPath()
+                ctx.arc(cx, cy, radius - 3, 0, 2 * Math.PI)
+                ctx.strokeStyle = Qt.rgba(Color.muted.r, Color.muted.g, Color.muted.b, 0.18)
+                ctx.lineWidth = 2.5
+                ctx.stroke()
+
+                // 3. Inner Concentric Radar Reticle
+                ctx.beginPath()
+                ctx.arc(cx, cy, radius - 18, 0, 2 * Math.PI)
+                ctx.strokeStyle = (root.hostWidget && root.hostWidget.timerRunning)
+                  ? Qt.rgba(arcColor.r, arcColor.g, arcColor.b, 0.25)
+                  : Qt.rgba(Color.muted.r, Color.muted.g, Color.muted.b, 0.08)
+                ctx.lineWidth = 1.0
+                ctx.stroke()
+
+                // 4. Active Sweeping Progress Arc
+                if (progress > 0) {
+                  ctx.beginPath()
+                  var startAngle = -Math.PI / 2
+                  var endAngle = startAngle + (2 * Math.PI * progress)
+                  ctx.arc(cx, cy, radius - 3, startAngle, endAngle, false)
+                  ctx.strokeStyle = arcColor
+                  ctx.lineWidth = 3.0
+                  ctx.lineCap = "round"
+                  ctx.stroke()
+                }
+              }
+
+              Connections {
+                target: root.hostWidget
+                function onTimeRemainingChanged() { sonarCanvas.requestPaint() }
+                function onTimerRunningChanged() { sonarCanvas.requestPaint() }
+                function onTotalDurationChanged() { sonarCanvas.requestPaint() }
+              }
             }
 
+            // Ghost Cowl Watermark in Center
+            BatmanMaskIcon {
+              anchors.centerIn: parent
+              anchors.verticalCenterOffset: Style.space(-14)
+              iconSize: Style.space(64)
+              maskColor: Color.foreground
+              opacity: 0.09
+              active: true
+            }
+
+            // Center Digital Readout
             ColumnLayout {
               anchors.centerIn: parent
-              spacing: Style.space(2)
+              spacing: 0
 
               Text {
                 Layout.alignment: Qt.AlignHCenter
                 text: root.hostWidget ? Storage.formatTime(root.hostWidget.timeRemaining) : "25:00"
                 textFormat: Text.PlainText
                 font.family: Style.font.family
-                font.pixelSize: Style.font.display
+                font.pixelSize: Style.font.display + Style.space(4)
                 font.bold: true
+                font.letterSpacing: 1.5
                 color: (root.hostWidget && (root.hostWidget.timerMode === 2 || root.hostWidget.timerMode === 3)) 
                   ? "#30d158" : Color.accent
               }
+
               Text {
                 Layout.alignment: Qt.AlignHCenter
                 text: {
-                  if (!root.hostWidget) return "Patrol Session"
-                  if (root.hostWidget.timerMode === -1) return "Custom Duration"
-                  var modes = ["25m Focus", "50m Deep Work", "5m Rest", "15m Recharge"]
-                  return modes[root.hostWidget.timerMode] || "Patrol Session"
+                  if (!root.hostWidget) return "PATROL SURVEILLANCE"
+                  if (root.hostWidget.timerMode === -1) return "CUSTOM SPRINT // " + Math.round(root.hostWidget.totalDuration / 60) + "M"
+                  var modes = ["FOCUS SPRINT // 25M", "DEEP SURVEILLANCE // 50M", "TACTICAL REST // 5M", "RECHARGE // 15M"]
+                  return modes[root.hostWidget.timerMode] || "PATROL SURVEILLANCE"
                 }
                 textFormat: Text.PlainText
                 font.family: Style.font.family
-                font.pixelSize: Style.font.bodySmall
+                font.pixelSize: 10
                 font.bold: true
+                font.letterSpacing: 1
                 color: Color.foreground
-                opacity: 0.8
+                opacity: 0.85
               }
             }
           }
@@ -768,7 +837,7 @@ Item {
               ]
               delegate: Rectangle {
                 Layout.fillWidth: true
-                height: Style.space(28)
+                height: Style.space(30)
                 radius: Style.space(4)
                 color: (root.hostWidget && (root.hostWidget.timerMode === modelData.mode || Math.round(root.hostWidget.totalDuration / 60) === modelData.mins)) ? Color.accent : Color.background
                 border.color: Color.accent
@@ -803,8 +872,8 @@ Item {
             spacing: Style.space(6)
 
             Rectangle {
-              height: Style.space(30)
-              implicitWidth: Style.space(70)
+              height: Style.space(32)
+              implicitWidth: Style.space(76)
               radius: Style.space(4)
               color: Color.background
               border.color: Color.muted
@@ -828,7 +897,7 @@ Item {
 
             Rectangle {
               Layout.fillWidth: true
-              height: Style.space(30)
+              height: Style.space(32)
               radius: Style.space(4)
               color: Color.background
               border.color: Color.muted
@@ -856,8 +925,8 @@ Item {
             }
 
             Rectangle {
-              height: Style.space(30)
-              implicitWidth: Style.space(70)
+              height: Style.space(32)
+              implicitWidth: Style.space(76)
               radius: Style.space(4)
               color: Color.background
               border.color: Color.muted
@@ -880,7 +949,7 @@ Item {
             }
           }
 
-          // Patrol Controls
+          // Patrol Primary Controls
           RowLayout {
             Layout.fillWidth: true
             spacing: Style.space(8)
@@ -935,7 +1004,7 @@ Item {
           // Standup Export Button
           Rectangle {
             Layout.fillWidth: true
-            height: Style.space(32)
+            height: Style.space(34)
             radius: Style.space(4)
             color: Color.background
             border.color: Color.accent
