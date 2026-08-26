@@ -2,18 +2,18 @@
   "schemaVersion": 1,
   "id": "batputer",
   "name": "BatPuter",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "author": "phaze7r",
-  "description": "Tactical Wayne Tech AI Assistant & Operations HUD for Master Wayne",
+  "description": "Gotham-themed tactical productivity HUD for Omarchy with customizable Pomodoro focus, case files, forensic notes, Alfred comms, ambient rain focus, and daily debrief export.",
   "kinds": ["bar-widget"],
   "activation": "on-demand",
   "entryPoints": {
     "barWidget": "BarWidget.qml"
   },
   "barWidget": {
-    "displayName": "BatPuter AI Assistant",
+    "displayName": "BatPuter Tactical Productivity HUD",
     "description": "Tactical AI assistant with Pomodoro Focus Timer, Mission Agenda, Notes, Alfred Check-in Prompts, and Quick Ops.",
-    "category": "AI",
+    "category": "Productivity",
     "allowMultiple": false,
     "defaultSection": "right",
     "defaults": {

@@ -48,21 +48,26 @@ Item {
   // User & Configuration State
   property string callSign: "Master Wayne"
   property bool editingCallSign: false
+  property string customMinsInput: "30"
 
-  // Telemetry properties
+  // Live Telemetry properties
   property string cpuLoad: "0.0"
   property string memUsage: "0%"
+  property string diskUsage: "--"
+  property string netDown: "0 KB/s"
+  property string netUp: "0 KB/s"
+  property real lastRxBytes: 0
+  property real lastTxBytes: 0
 
   // Data models
   property var agendaList: []
   property var notesData: ({ activeTab: 0, tabs: [
-    { title: "Forensic Analysis", content: "# GOTHAM FORENSIC DOSSIER\n- Target: Arkham Security Perimeter\n- Status: Under Investigation\n- Evidence: Encrypted micro-drives recovered at site." },
-    { title: "Case Dossier", content: "# CASE FILE: J-89\n- Telemetry: High frequency radio bursts detected downtown.\n- Hypothesis: Rogue transmission grid." },
-    { title: "Wayne Directives", content: "# WAYNE TECH PROTOCOLS\n- Maintain quantum encryption at all times.\n- Batmobile remote standby: Ready." }
+    { title: "Daily Log", content: "# DAILY MISSION LOG\n- Status: All systems operational\n- Focus: Complete primary objectives." },
+    { title: "Scratchpad", content: "Quick ideas, tactical observations, thoughts..." },
+    { title: "Snippets", content: "# USEFUL COMMANDS\nomarchy theme current\nhyprctl reload" }
   ]})
   property int activeNoteTabIndex: 0
   property int currentTab: 0
-  property string agendaFilter: "all"
   property string newMissionTitle: ""
   property string newMissionPriority: "alpha"
 
@@ -94,6 +99,27 @@ Item {
         var pct = Math.round((used / total) * 100)
         root.memUsage = pct + "%"
       }
+    }
+  }
+
+  FileView {
+    id: diskFile
+    path: "/tmp/batputer_disk"
+    watchChanges: true
+    printErrors: false
+    onLoaded: {
+      var t = text().trim()
+      if (t) root.diskUsage = t
+    }
+  }
+
+  FileView {
+    id: netFile
+    path: "/proc/net/dev"
+    watchChanges: true
+    printErrors: false
+    onLoaded: {
+      root.updateNetStats(text())
     }
   }
 
@@ -137,22 +163,59 @@ Item {
   }
 
   Timer {
-    interval: 3000
+    interval: 2000
     repeat: true
     running: root.opened
     onTriggered: {
       loadFile.reload()
       memFile.reload()
+      netFile.reload()
+      root.updateDisk()
     }
+  }
+
+  function updateDisk() {
+    Quickshell.execDetached(["bash", "-c",
+      "df -h / | awk 'NR==2 {print $3 \"/\" $2}' > /tmp/batputer_disk"
+    ])
+    diskFile.reload()
+  }
+
+  function updateNetStats(text) {
+    if (!text) return
+    var lines = text.split("\n")
+    var totalRx = 0
+    var totalTx = 0
+    for (var i = 2; i < lines.length; i++) {
+      var line = lines[i].trim()
+      if (!line || line.indexOf("lo:") === 0) continue
+      var parts = line.split(/\s+/)
+      if (parts.length >= 10) {
+        var rx = parseInt(parts[1]) || 0
+        var tx = parseInt(parts[9]) || 0
+        totalRx += rx
+        totalTx += tx
+      }
+    }
+    if (root.lastRxBytes > 0 && totalRx >= root.lastRxBytes) {
+      var rxDiff = (totalRx - root.lastRxBytes) / 2
+      var txDiff = (totalTx - root.lastTxBytes) / 2
+      root.netDown = Storage.formatSpeed(rxDiff)
+      root.netUp = Storage.formatSpeed(txDiff)
+    }
+    root.lastRxBytes = totalRx
+    root.lastTxBytes = totalTx
   }
 
   function refreshData() {
     Quickshell.execDetached(["mkdir", "-p", root.batputerDir])
+    updateDisk()
     configFile.reload()
     agendaFile.reload()
     notesFile.reload()
     loadFile.reload()
     memFile.reload()
+    netFile.reload()
   }
 
   function saveConfig() {
@@ -183,32 +246,6 @@ Item {
     if (root.notesData && root.notesData.tabs && root.notesData.tabs[idx]) {
       noteArea.text = root.notesData.tabs[idx].content || ""
     }
-  }
-
-  function addNoteTab() {
-    saveCurrentNote()
-    var data = root.notesData
-    if (!data.tabs) data.tabs = []
-    data.tabs.push({
-      title: "Dossier " + (data.tabs.length + 1),
-      content: "# DOSSIER " + (data.tabs.length + 1) + "\n"
-    })
-    root.notesData = data
-    root.activeNoteTabIndex = data.tabs.length - 1
-    if (noteArea) noteArea.text = "# DOSSIER " + data.tabs.length + "\n"
-    saveCurrentNote()
-  }
-
-  function deleteNoteTab(idx) {
-    var data = root.notesData
-    if (!data.tabs || data.tabs.length <= 1) return
-    data.tabs.splice(idx, 1)
-    root.activeNoteTabIndex = Math.max(0, idx - 1)
-    root.notesData = data
-    if (noteArea && data.tabs[root.activeNoteTabIndex]) {
-      noteArea.text = data.tabs[root.activeNoteTabIndex].content || ""
-    }
-    saveCurrentNote()
   }
 
   function addMission() {
@@ -242,10 +279,54 @@ Item {
     saveMissions(list)
   }
 
+  function clearResolvedMissions() {
+    var list = root.agendaList.filter(function(it) { return !it.completed })
+    root.agendaList = list
+    saveMissions(list)
+    Quickshell.execDetached(["omarchy-notification-send", "Cases Cleared", "Completed tasks cleared from active list.", "-g", "󰢌"])
+  }
+
   function saveMissions(list) {
     Quickshell.execDetached(["bash", "-c",
       "printf '%s' '" + JSON.stringify(list).replace(/'/g, "'\\''") +
       "' > '" + root.batputerDir + "/agenda.json'"])
+  }
+
+  function promoteNoteToCase() {
+    if (!noteArea) return
+    var txt = noteArea.text.trim()
+    if (!txt) return
+    var firstLine = txt.split("\n")[0].replace(/^[#\-\*\s]+/, "").trim()
+    if (!firstLine) firstLine = "Forensic Note Objective"
+    
+    var list = root.agendaList.slice()
+    list.unshift({
+      id: Date.now(),
+      title: firstLine,
+      section: "today",
+      priority: "alpha",
+      completed: false,
+      created: new Date().toISOString().split("T")[0]
+    })
+    root.agendaList = list
+    saveMissions(list)
+    root.currentTab = 1
+    Quickshell.execDetached(["omarchy-notification-send", "Case Dossier Created", "Note promoted to active ALPHA case objective.", "-g", "󰢌"])
+  }
+
+  function exportDebrief() {
+    var report = Storage.generateDebriefReport(
+      root.callSign,
+      root.hostWidget ? root.hostWidget.sessionsCompleted : 0,
+      root.hostWidget ? root.hostWidget.totalFocusSeconds : 0,
+      root.hostWidget ? root.hostWidget.streakDays : 1,
+      root.agendaList,
+      root.notesData
+    )
+    Quickshell.execDetached(["bash", "-c",
+      "printf '%s' '" + report.replace(/'/g, "'\\''") + "' | wl-copy"
+    ])
+    Quickshell.execDetached(["omarchy-notification-send", "Tactical Debrief Copied", "Daily standup report copied to clipboard.", "-g", "󰢌"])
   }
 
   KeyboardPanel {
@@ -254,8 +335,8 @@ Item {
     owner: root.barIdentity
     bar: root.bar
     open: root.opened
-    contentWidth: Style.space(510)
-    contentHeight: Style.space(580)
+    contentWidth: Style.space(520)
+    contentHeight: Style.space(590)
 
     ColumnLayout {
       anchors.fill: parent
@@ -268,8 +349,8 @@ Item {
         spacing: Style.space(10)
 
         Rectangle {
-          width: Style.space(42)
-          height: Style.space(42)
+          width: Style.space(44)
+          height: Style.space(44)
           radius: Style.space(6)
           color: Color.background
           border.color: Color.accent
@@ -277,15 +358,16 @@ Item {
 
           BatmanMaskIcon {
             anchors.centerIn: parent
-            iconSize: Style.space(28)
+            iconSize: Style.space(30)
             maskColor: Color.foreground
             active: true
             pulsing: root.hostWidget ? root.hostWidget.timerRunning : false
+            batSignalActive: root.hostWidget ? root.hostWidget.batSignalActive : false
           }
         }
 
         ColumnLayout {
-          spacing: 1
+          spacing: 2
 
           RowLayout {
             spacing: Style.space(6)
@@ -300,28 +382,28 @@ Item {
             }
 
             Rectangle {
-              height: Style.space(16)
-              implicitWidth: Style.space(76)
-              radius: Style.space(3)
+              height: Style.space(18)
+              implicitWidth: Style.space(78)
+              radius: Style.space(4)
               color: Color.background
               border.color: "#30d158"
               border.width: 1
 
               RowLayout {
                 anchors.centerIn: parent
-                spacing: 3
-                Rectangle { width: 5; height: 5; radius: 2.5; color: "#30d158" }
+                spacing: 4
+                Rectangle { width: 6; height: 6; radius: 3; color: "#30d158" }
                 Text {
-                  text: "BATCAVE v2.4"
+                  text: "BATCAVE v3.0"
                   font.family: Style.font.family
-                  font.pixelSize: 8
+                  font.pixelSize: 9
                   font.bold: true
                   color: "#30d158"
                 }
               }
             }
 
-            // Callsign pill badge (Click to edit)
+            // Callsign pill badge
             Rectangle {
               height: Style.space(18)
               implicitWidth: callSignTxt.implicitWidth + Style.space(12)
@@ -346,45 +428,43 @@ Item {
                 onClicked: root.editingCallSign = !root.editingCallSign
               }
             }
+
+            // Streak Badge
+            Rectangle {
+              height: Style.space(18)
+              implicitWidth: streakTxt.implicitWidth + Style.space(10)
+              radius: Style.space(4)
+              color: Color.background
+              border.color: "#ff9500"
+              border.width: 1
+
+              Text {
+                id: streakTxt
+                anchors.centerIn: parent
+                text: "🔥 " + (root.hostWidget ? root.hostWidget.streakDays : 1) + "d Streak"
+                font.family: Style.font.family
+                font.pixelSize: Style.font.caption
+                font.bold: true
+                color: "#ff9500"
+              }
+            }
           }
 
           Text {
             text: (root.hostWidget && root.hostWidget.timerRunning)
-              ? "SURVEILLANCE ACTIVE — " + Storage.formatTime(root.hostWidget.timeRemaining)
-              : "Gotham Tactical Terminal // " + root.callSign
+              ? "⚡ SURVEILLANCE ACTIVE — " + Storage.formatTime(root.hostWidget.timeRemaining)
+              : Storage.getDetectiveRank(root.hostWidget ? root.hostWidget.sessionsCompleted : 0) + "  //  " + root.callSign
             font.family: Style.font.family
-            font.pixelSize: Style.font.caption
-            color: (root.hostWidget && root.hostWidget.timerRunning) ? Color.accent : Color.muted
+            font.pixelSize: Style.font.bodySmall
+            font.bold: true
+            color: (root.hostWidget && root.hostWidget.timerRunning) ? Color.accent : Color.foreground
           }
         }
 
         Item { Layout.fillWidth: true }
-
-        Rectangle {
-          width: Style.space(28)
-          height: Style.space(28)
-          radius: Style.space(4)
-          color: Color.background
-          border.color: Color.muted
-          border.width: 1
-
-          Text {
-            anchors.centerIn: parent
-            text: "✕"
-            font.family: Style.font.family
-            font.pixelSize: Style.font.body
-            color: Color.muted
-          }
-
-          MouseArea {
-            anchors.fill: parent
-            cursorShape: Qt.PointingHandCursor
-            onClicked: root.close()
-          }
-        }
       }
 
-      // Callsign In-line Editor Row (Appears when clicked)
+      // Callsign In-line Editor Row
       RowLayout {
         visible: root.editingCallSign
         Layout.fillWidth: true
@@ -393,8 +473,9 @@ Item {
         Text {
           text: "Detective Callsign:"
           font.family: Style.font.family
-          font.pixelSize: Style.font.caption
-          color: Color.muted
+          font.pixelSize: Style.font.bodySmall
+          font.bold: true
+          color: Color.foreground
         }
 
         TextField {
@@ -403,7 +484,7 @@ Item {
           text: root.callSign
           placeholderText: "e.g. Master Wayne, The Detective, Bruce..."
           font.family: Style.font.family
-          font.pixelSize: Style.font.caption
+          font.pixelSize: Style.font.body
           color: Color.foreground
           background: Rectangle {
             radius: Style.space(4)
@@ -421,8 +502,8 @@ Item {
         }
 
         Rectangle {
-          height: Style.space(26)
-          implicitWidth: Style.space(55)
+          height: Style.space(30)
+          implicitWidth: Style.space(60)
           radius: Style.space(4)
           color: Color.accent
 
@@ -448,10 +529,10 @@ Item {
         }
       }
 
-      // ── Batcave Telemetry Banner ──────────────────────────────────────────
+      // ── High-Contrast Batcave Telemetry HUD (CPU, RAM, DISK, NET) ─────────
       Rectangle {
         Layout.fillWidth: true
-        height: Style.space(24)
+        height: Style.space(28)
         radius: Style.space(4)
         color: Color.background
         border.color: Color.muted
@@ -461,52 +542,84 @@ Item {
           anchors.fill: parent
           anchors.leftMargin: Style.space(8)
           anchors.rightMargin: Style.space(8)
-          spacing: Style.space(12)
+          spacing: Style.space(8)
 
+          // CPU
           RowLayout {
-            spacing: 4
-            Text { text: "CPU LOAD:"; font.family: Style.font.family; font.pixelSize: 9; font.bold: true; color: Color.muted }
-            Text { text: root.cpuLoad; font.family: Style.font.family; font.pixelSize: 9; font.bold: true; color: Color.accent }
+            spacing: 3
+            Text { text: "CPU"; font.family: Style.font.family; font.pixelSize: 10; font.bold: true; color: Color.muted }
+            Text { text: root.cpuLoad; font.family: Style.font.family; font.pixelSize: 11; font.bold: true; color: Color.accent }
           }
 
+          // RAM
           RowLayout {
-            spacing: 4
-            Text { text: "MEM USAGE:"; font.family: Style.font.family; font.pixelSize: 9; font.bold: true; color: Color.muted }
-            Text { text: root.memUsage; font.family: Style.font.family; font.pixelSize: 9; font.bold: true; color: Color.foreground }
+            spacing: 3
+            Text { text: "RAM"; font.family: Style.font.family; font.pixelSize: 10; font.bold: true; color: Color.muted }
+            Text { text: root.memUsage; font.family: Style.font.family; font.pixelSize: 11; font.bold: true; color: Color.foreground }
+          }
+
+          // DISK
+          RowLayout {
+            spacing: 3
+            Text { text: "DISK"; font.family: Style.font.family; font.pixelSize: 10; font.bold: true; color: Color.muted }
+            Text { text: root.diskUsage; font.family: Style.font.family; font.pixelSize: 11; font.bold: true; color: Color.foreground }
+          }
+
+          // NET DOWN / UP
+          RowLayout {
+            spacing: 3
+            Text { text: "NET"; font.family: Style.font.family; font.pixelSize: 10; font.bold: true; color: Color.muted }
+            Text { text: "↓ " + root.netDown; font.family: Style.font.family; font.pixelSize: 10; font.bold: true; color: "#30d158" }
+            Text { text: "↑ " + root.netUp; font.family: Style.font.family; font.pixelSize: 10; font.bold: true; color: Color.accent }
           }
 
           Item { Layout.fillWidth: true }
 
+          // SECURE LINK
           RowLayout {
             spacing: 4
             Rectangle { width: 6; height: 6; radius: 3; color: "#30d158" }
-            Text { text: "WAYNE SECURE LINK"; font.family: Style.font.family; font.pixelSize: 9; font.bold: true; color: Color.muted }
+            Text { text: "LINK OK"; font.family: Style.font.family; font.pixelSize: 10; font.bold: true; color: "#30d158" }
           }
         }
       }
 
-      // ── Tab Bar Navigation (Minimal & Theme-Oriented) ──────────────────────
+      // ── Tab Bar Navigation ────────────────────────────────────────────────
       RowLayout {
         Layout.fillWidth: true
         spacing: Style.space(4)
 
         Repeater {
-          model: ["Patrol", "Cases", "Forensics", "Alfred", "Operations"]
+          model: [
+            { name: "Patrol", icon: "⏱" },
+            { name: "Cases", icon: "📋" },
+            { name: "Notes", icon: "📝" },
+            { name: "Alfred", icon: "🦇" },
+            { name: "Dashboard", icon: "📊" }
+          ]
           delegate: Rectangle {
             Layout.fillWidth: true
-            height: Style.space(30)
+            height: Style.space(32)
             radius: Style.space(4)
             color: root.currentTab === index ? Color.accent : Color.background
             border.color: root.currentTab === index ? Color.accent : Color.muted
             border.width: 1
 
-            Text {
+            RowLayout {
               anchors.centerIn: parent
-              text: modelData
-              font.family: Style.font.family
-              font.pixelSize: Style.font.caption
-              font.bold: root.currentTab === index
-              color: root.currentTab === index ? Color.background : Color.foreground
+              spacing: Style.space(4)
+
+              Text {
+                text: modelData.icon
+                font.pixelSize: Style.font.caption
+              }
+              Text {
+                text: modelData.name
+                font.family: Style.font.family
+                font.pixelSize: Style.font.bodySmall
+                font.bold: root.currentTab === index
+                color: root.currentTab === index ? Color.background : Color.foreground
+              }
             }
 
             MouseArea {
@@ -524,24 +637,23 @@ Item {
         Layout.fillHeight: true
 
         // ═════════════════════════════════════════════════════════════════════
-        // Tab 0: Tactical Patrol (Pomodoro Focus)
+        // Tab 0: Tactical Patrol (Pomodoro Focus + Customizable Duration)
         // ═════════════════════════════════════════════════════════════════════
         ColumnLayout {
           visible: root.currentTab === 0
           anchors.fill: parent
-          spacing: Style.space(12)
+          spacing: Style.space(10)
 
           // Radar-style circular timer
           Rectangle {
             Layout.alignment: Qt.AlignHCenter
-            width: Style.space(150)
-            height: Style.space(150)
+            width: Style.space(136)
+            height: Style.space(136)
             radius: width / 2
             color: Color.background
             border.color: (root.hostWidget && root.hostWidget.timerRunning) ? Color.accent : Color.muted
             border.width: 2
 
-            // Outer radar pulse circle
             Rectangle {
               anchors.centerIn: parent
               width: parent.width - Style.space(16)
@@ -569,34 +681,36 @@ Item {
               Text {
                 Layout.alignment: Qt.AlignHCenter
                 text: {
-                  if (!root.hostWidget) return "Patrol Focus"
-                  var modes = ["25m Surveillance", "50m Deep Investigation", "5m Tactical Rest", "15m Batcave Recharge"]
-                  return modes[root.hostWidget.timerMode] || "Patrol Focus"
+                  if (!root.hostWidget) return "Patrol Session"
+                  if (root.hostWidget.timerMode === -1) return "Custom Duration"
+                  var modes = ["25m Focus", "50m Deep Work", "5m Rest", "15m Recharge"]
+                  return modes[root.hostWidget.timerMode] || "Patrol Session"
                 }
                 font.family: Style.font.family
-                font.pixelSize: Style.font.caption
+                font.pixelSize: Style.font.bodySmall
                 font.bold: true
-                color: Color.muted
+                color: Color.foreground
+                opacity: 0.8
               }
             }
           }
 
-          // Tactical Patrol Presets
+          // Quick Presets
           RowLayout {
             Layout.fillWidth: true
             spacing: Style.space(6)
             Repeater {
               model: [
-                { label: "25m Patrol", mode: 0 },
-                { label: "50m Investigate", mode: 1 },
-                { label: "5m Rest", mode: 2 },
-                { label: "15m Recharge", mode: 3 }
+                { label: "15m", mode: 3, mins: 15 },
+                { label: "25m", mode: 0, mins: 25 },
+                { label: "45m", mode: -1, mins: 45 },
+                { label: "60m", mode: 1, mins: 60 }
               ]
               delegate: Rectangle {
                 Layout.fillWidth: true
-                height: Style.space(32)
+                height: Style.space(28)
                 radius: Style.space(4)
-                color: (root.hostWidget && root.hostWidget.timerMode === modelData.mode) ? Color.accent : Color.background
+                color: (root.hostWidget && (root.hostWidget.timerMode === modelData.mode || Math.round(root.hostWidget.totalDuration / 60) === modelData.mins)) ? Color.accent : Color.background
                 border.color: Color.accent
                 border.width: 1
 
@@ -605,14 +719,98 @@ Item {
                   text: modelData.label
                   font.family: Style.font.family
                   font.pixelSize: Style.font.caption
-                  font.bold: root.hostWidget && root.hostWidget.timerMode === modelData.mode
-                  color: (root.hostWidget && root.hostWidget.timerMode === modelData.mode) ? Color.background : Color.foreground
+                  font.bold: true
+                  color: (root.hostWidget && (root.hostWidget.timerMode === modelData.mode || Math.round(root.hostWidget.totalDuration / 60) === modelData.mins)) ? Color.background : Color.foreground
                 }
                 MouseArea {
                   anchors.fill: parent
                   cursorShape: Qt.PointingHandCursor
-                  onClicked: if (root.hostWidget) root.hostWidget.setTimerDuration(modelData.mode)
+                  onClicked: {
+                    if (root.hostWidget) {
+                      if (modelData.mode >= 0) root.hostWidget.setTimerDuration(modelData.mode)
+                      else root.hostWidget.setCustomMinutes(modelData.mins)
+                    }
+                  }
                 }
+              }
+            }
+          }
+
+          // Custom Duration Adjuster
+          RowLayout {
+            Layout.fillWidth: true
+            spacing: Style.space(6)
+
+            Rectangle {
+              height: Style.space(30)
+              implicitWidth: Style.space(70)
+              radius: Style.space(4)
+              color: Color.background
+              border.color: Color.muted
+              border.width: 1
+
+              Text {
+                anchors.centerIn: parent
+                text: "- 5m"
+                font.family: Style.font.family
+                font.pixelSize: Style.font.caption
+                font.bold: true
+                color: Color.foreground
+              }
+              MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: if (root.hostWidget) root.hostWidget.adjustMinutes(-5)
+              }
+            }
+
+            Rectangle {
+              Layout.fillWidth: true
+              height: Style.space(30)
+              radius: Style.space(4)
+              color: Color.background
+              border.color: Color.muted
+              border.width: 1
+
+              RowLayout {
+                anchors.centerIn: parent
+                spacing: Style.space(6)
+                Text {
+                  text: "Duration:"
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.caption
+                  color: Color.muted
+                }
+                Text {
+                  text: (root.hostWidget ? Math.round(root.hostWidget.totalDuration / 60) : 25) + " min"
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.caption
+                  font.bold: true
+                  color: Color.accent
+                }
+              }
+            }
+
+            Rectangle {
+              height: Style.space(30)
+              implicitWidth: Style.space(70)
+              radius: Style.space(4)
+              color: Color.background
+              border.color: Color.muted
+              border.width: 1
+
+              Text {
+                anchors.centerIn: parent
+                text: "+ 5m"
+                font.family: Style.font.family
+                font.pixelSize: Style.font.caption
+                font.bold: true
+                color: Color.foreground
+              }
+              MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: if (root.hostWidget) root.hostWidget.adjustMinutes(5)
               }
             }
           }
@@ -624,7 +822,7 @@ Item {
 
             Rectangle {
               Layout.fillWidth: true
-              height: Style.space(40)
+              height: Style.space(38)
               radius: Style.space(4)
               color: (root.hostWidget && (root.hostWidget.timerMode === 2 || root.hostWidget.timerMode === 3)) 
                 ? "#30d158" : Color.accent
@@ -645,7 +843,7 @@ Item {
             }
 
             Rectangle {
-              height: Style.space(40)
+              height: Style.space(38)
               radius: Style.space(4)
               color: Color.background
               border.color: Color.muted
@@ -667,54 +865,32 @@ Item {
             }
           }
 
-          // Tactical Summary
+          // Standup Export Button
           Rectangle {
             Layout.fillWidth: true
-            height: Style.space(48)
+            height: Style.space(32)
             radius: Style.space(4)
             color: Color.background
-            border.color: Color.muted
+            border.color: Color.accent
             border.width: 1
 
             RowLayout {
+              anchors.centerIn: parent
+              spacing: Style.space(6)
+              Text { text: "📋"; font.pixelSize: Style.font.caption }
+              Text {
+                text: "Export Daily Standup Debrief"
+                font.family: Style.font.family
+                font.pixelSize: Style.font.caption
+                font.bold: true
+                color: Color.accent
+              }
+            }
+
+            MouseArea {
               anchors.fill: parent
-              anchors.margins: Style.space(8)
-
-              ColumnLayout {
-                spacing: 1
-                Text {
-                  text: "Patrol Sessions Completed"
-                  font.family: Style.font.family
-                  font.pixelSize: Style.font.caption
-                  color: Color.muted
-                }
-                Text {
-                  text: (root.hostWidget ? root.hostWidget.sessionsCompleted : 0) + " Missions"
-                  font.family: Style.font.family
-                  font.pixelSize: Style.font.bodySmall
-                  font.bold: true
-                  color: Color.accent
-                }
-              }
-
-              Item { Layout.fillWidth: true }
-
-              ColumnLayout {
-                spacing: 1
-                Text {
-                  text: "Total Gotham Surveillance"
-                  font.family: Style.font.family
-                  font.pixelSize: Style.font.caption
-                  color: Color.muted
-                }
-                Text {
-                  text: Storage.formatDuration(root.hostWidget ? root.hostWidget.totalFocusSeconds : 0)
-                  font.family: Style.font.family
-                  font.pixelSize: Style.font.bodySmall
-                  font.bold: true
-                  color: Color.foreground
-                }
-              }
+              cursorShape: Qt.PointingHandCursor
+              onClicked: root.exportDebrief()
             }
           }
 
@@ -722,14 +898,14 @@ Item {
         }
 
         // ═════════════════════════════════════════════════════════════════════
-        // Tab 1: Case Files (Active Dossiers)
+        // Tab 1: Case Files (Active Agenda & To-Do List)
         // ═════════════════════════════════════════════════════════════════════
         ColumnLayout {
           visible: root.currentTab === 1
           anchors.fill: parent
           spacing: Style.space(8)
 
-          // Input Row
+          // Input Row (Proportional 38px height)
           RowLayout {
             Layout.fillWidth: true
             spacing: Style.space(6)
@@ -737,13 +913,16 @@ Item {
             TextField {
               id: missionInput
               Layout.fillWidth: true
-              placeholderText: "Log new active case objective / target..."
+              implicitHeight: Style.space(38)
+              placeholderText: "Log new case objective / to-do..."
               text: root.newMissionTitle
               onTextChanged: root.newMissionTitle = text
               onAccepted: root.addMission()
               font.family: Style.font.family
               font.pixelSize: Style.font.body
               color: Color.foreground
+              leftPadding: Style.space(10)
+              rightPadding: Style.space(10)
               background: Rectangle {
                 radius: Style.space(4)
                 color: Color.background
@@ -766,9 +945,11 @@ Item {
               onCurrentValueChanged: root.newMissionPriority = currentValue
               font.family: Style.font.family
               font.pixelSize: Style.font.caption
-              implicitWidth: Style.space(90)
+              implicitWidth: Style.space(100)
+              implicitHeight: Style.space(38)
               
               background: Rectangle {
+                implicitHeight: Style.space(38)
                 radius: Style.space(4)
                 color: Color.background
                 border.color: Storage.priorityColor(priorityCombo.currentValue, Color.accent)
@@ -776,38 +957,41 @@ Item {
               }
 
               contentItem: Text {
-                leftPadding: Style.space(8)
-                rightPadding: Style.space(8)
+                leftPadding: Style.space(10)
+                rightPadding: Style.space(10)
                 text: priorityCombo.displayText
                 font.family: Style.font.family
                 font.pixelSize: Style.font.caption
                 font.bold: true
                 color: Storage.priorityColor(priorityCombo.currentValue, Color.accent)
                 verticalAlignment: Text.AlignVCenter
+                horizontalAlignment: Text.AlignHCenter
               }
 
               delegate: ItemDelegate {
                 width: priorityCombo.width
+                implicitHeight: Style.space(32)
                 highlighted: priorityCombo.highlightedIndex === index
                 background: Rectangle {
-                  radius: Style.space(2)
+                  radius: Style.space(3)
                   color: priorityCombo.highlightedIndex === index ? Color.accent : Color.background
                 }
                 contentItem: Text {
-                  leftPadding: Style.space(6)
+                  leftPadding: Style.space(8)
                   text: modelData.text
                   font.family: Style.font.family
                   font.pixelSize: Style.font.caption
                   font.bold: true
                   color: priorityCombo.highlightedIndex === index ? Color.background : Storage.priorityColor(modelData.value, Color.accent)
                   verticalAlignment: Text.AlignVCenter
+                  horizontalAlignment: Text.AlignHCenter
                 }
               }
 
               popup: Popup {
-                y: priorityCombo.height + Style.space(2)
+                y: priorityCombo.height + Style.space(3)
                 width: priorityCombo.width
-                padding: Style.space(2)
+                padding: Style.space(3)
                 background: Rectangle {
                   radius: Style.space(4)
                   color: Color.background
@@ -899,6 +1083,7 @@ Item {
                     text: modelData.title || modelData.text || ""
                     font.family: Style.font.family
                     font.pixelSize: Style.font.body
+                    font.bold: true
                     color: Color.foreground
                     wrapMode: Text.WordWrap
                     font.strikeout: modelData.completed
@@ -916,11 +1101,22 @@ Item {
                     }
                   }
 
-                  // Purge Dossier
-                  Text {
-                    text: "✕"
-                    font.pixelSize: Style.font.body
-                    color: Color.muted
+                  // Minimal Delete
+                  Rectangle {
+                    height: Style.space(20)
+                    implicitWidth: Style.space(28)
+                    radius: Style.space(3)
+                    color: Color.background
+                    border.color: Color.muted
+                    border.width: 1
+
+                    Text {
+                      anchors.centerIn: parent
+                      text: "Del"
+                      font.family: Style.font.family
+                      font.pixelSize: 9
+                      color: Color.muted
+                    }
                     MouseArea {
                       anchors.fill: parent
                       cursorShape: Qt.PointingHandCursor
@@ -934,51 +1130,35 @@ Item {
         }
 
         // ═════════════════════════════════════════════════════════════════════
-        // Tab 2: Forensics (Multi-Tab Detective Scratchpad)
+        // Tab 2: Notes (Simplified 3-Category Scratchpad + Note-to-Case Promo)
         // ═════════════════════════════════════════════════════════════════════
         ColumnLayout {
           visible: root.currentTab === 2
           anchors.fill: parent
           spacing: Style.space(8)
 
+          // Fixed category switcher
           RowLayout {
             Layout.fillWidth: true
             spacing: Style.space(4)
 
             Repeater {
-              model: root.notesData && root.notesData.tabs ? root.notesData.tabs : []
+              model: ["Daily Log", "Scratchpad", "Snippets"]
               delegate: Rectangle {
-                height: Style.space(26)
-                implicitWidth: tabRow.implicitWidth + Style.space(12)
+                Layout.fillWidth: true
+                height: Style.space(28)
                 radius: Style.space(4)
                 color: root.activeNoteTabIndex === index ? Color.accent : Color.background
                 border.color: root.activeNoteTabIndex === index ? Color.accent : Color.muted
                 border.width: 1
 
-                RowLayout {
-                  id: tabRow
+                Text {
                   anchors.centerIn: parent
-                  spacing: Style.space(4)
-
-                  Text {
-                    text: modelData.title || "Dossier " + (index + 1)
-                    font.family: Style.font.family
-                    font.pixelSize: Style.font.caption
-                    font.bold: root.activeNoteTabIndex === index
-                    color: root.activeNoteTabIndex === index ? Color.background : Color.foreground
-                  }
-
-                  Text {
-                    visible: root.notesData.tabs.length > 1
-                    text: "×"
-                    font.pixelSize: Style.font.caption
-                    color: root.activeNoteTabIndex === index ? Color.background : Color.muted
-                    MouseArea {
-                      anchors.fill: parent
-                      cursorShape: Qt.PointingHandCursor
-                      onClicked: root.deleteNoteTab(index)
-                    }
-                  }
+                  text: modelData
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.bodySmall
+                  font.bold: root.activeNoteTabIndex === index
+                  color: root.activeNoteTabIndex === index ? Color.background : Color.foreground
                 }
 
                 MouseArea {
@@ -988,35 +1168,13 @@ Item {
                 }
               }
             }
-
-            Rectangle {
-              height: Style.space(26)
-              width: Style.space(26)
-              radius: Style.space(4)
-              color: Color.background
-              border.color: Color.muted
-              border.width: 1
-
-              Text {
-                anchors.centerIn: parent
-                text: "+"
-                font.family: Style.font.family
-                font.pixelSize: Style.font.body
-                color: Color.muted
-              }
-              MouseArea {
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                onClicked: root.addNoteTab()
-              }
-            }
           }
 
           TextArea {
             id: noteArea
             Layout.fillWidth: true
             Layout.fillHeight: true
-            placeholderText: "Log forensic data, cryptographic hashes, crime scene observations..."
+            placeholderText: "Type notes, thoughts, tasks, code snippets here..."
             font.family: Style.font.family
             font.pixelSize: Style.font.body
             color: Color.foreground
@@ -1031,11 +1189,12 @@ Item {
 
           RowLayout {
             Layout.fillWidth: true
+            spacing: Style.space(6)
 
             Text {
-              text: "FORENSIC LOG: " + (noteArea ? noteArea.text.length : 0) + " BYTES"
+              text: (noteArea ? noteArea.text.length : 0) + " characters"
               font.family: Style.font.family
-              font.pixelSize: 9
+              font.pixelSize: 10
               font.bold: true
               color: Color.muted
             }
@@ -1043,16 +1202,39 @@ Item {
             Item { Layout.fillWidth: true }
 
             Rectangle {
-              height: Style.space(34)
+              height: Style.space(32)
               radius: Style.space(4)
-              color: Color.accent
-              implicitWidth: Style.space(120)
+              color: Color.background
+              border.color: Color.accent
+              border.width: 1
+              implicitWidth: Style.space(130)
 
               Text {
                 anchors.centerIn: parent
-                text: "Save Dossier"
+                text: "Promote to Case"
                 font.family: Style.font.family
-                font.pixelSize: Style.font.body
+                font.pixelSize: Style.font.caption
+                font.bold: true
+                color: Color.accent
+              }
+              MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.promoteNoteToCase()
+              }
+            }
+
+            Rectangle {
+              height: Style.space(32)
+              radius: Style.space(4)
+              color: Color.accent
+              implicitWidth: Style.space(100)
+
+              Text {
+                anchors.centerIn: parent
+                text: "Save Note"
+                font.family: Style.font.family
+                font.pixelSize: Style.font.caption
                 font.bold: true
                 color: Color.background
               }
@@ -1102,7 +1284,7 @@ Item {
                 text: "Next scheduled briefing for " + root.callSign + " in: " + (root.hostWidget ? Storage.formatTime(root.hostWidget.checkInSecondsLeft) : "--:--")
                 font.family: Style.font.family
                 font.pixelSize: Style.font.bodySmall
-                color: Color.muted
+                color: Color.foreground
               }
             }
           }
@@ -1115,13 +1297,17 @@ Item {
             border.color: Color.accent
             border.width: 1
 
-            Text {
+            RowLayout {
               anchors.centerIn: parent
-              text: "Request Tactical Briefing from Alfred"
-              font.family: Style.font.family
-              font.pixelSize: Style.font.body
-              font.bold: true
-              color: Color.accent
+              spacing: Style.space(6)
+              Text { text: "🎙"; font.pixelSize: Style.font.body }
+              Text {
+                text: "Request Tactical Briefing from Alfred"
+                font.family: Style.font.family
+                font.pixelSize: Style.font.body
+                font.bold: true
+                color: Color.accent
+              }
             }
 
             MouseArea {
@@ -1147,7 +1333,7 @@ Item {
               Text {
                 text: "ALFRED'S DIRECTIVE:"
                 font.family: Style.font.family
-                font.pixelSize: 9
+                font.pixelSize: 10
                 font.bold: true
                 color: Color.muted
               }
@@ -1157,7 +1343,7 @@ Item {
                 wrapMode: Text.WordWrap
                 text: "“Remember, " + root.callSign + ", the mind is your sharpest batarang. Periodic tactical pauses prevent forensic fatigue and sharpen your deduction.”"
                 font.family: Style.font.family
-                font.pixelSize: Style.font.bodySmall
+                font.pixelSize: Style.font.body
                 color: Color.foreground
               }
 
@@ -1167,19 +1353,151 @@ Item {
         }
 
         // ═════════════════════════════════════════════════════════════════════
-        // Tab 4: Batcave Operations (Quick Ops)
+        // Tab 4: Daily Productivity Dashboard & Tactical System Controls
         // ═════════════════════════════════════════════════════════════════════
         ColumnLayout {
           visible: root.currentTab === 4
           anchors.fill: parent
           spacing: Style.space(10)
 
+          // ── Today's Mission Stats Card ────────────────────────────────────
+          Rectangle {
+            Layout.fillWidth: true
+            height: Style.space(110)
+            radius: Style.space(4)
+            color: Color.background
+            border.color: Color.accent
+            border.width: 1
+
+            ColumnLayout {
+              anchors.fill: parent
+              anchors.margins: Style.space(10)
+              spacing: Style.space(8)
+
+              RowLayout {
+                Layout.fillWidth: true
+                spacing: 6
+                Text { text: "📊"; font.pixelSize: Style.font.caption }
+                Text {
+                  text: "TODAY'S MISSION DASHBOARD"
+                  font.family: Style.font.family
+                  font.bold: true
+                  font.pixelSize: Style.font.caption
+                  color: Color.accent
+                }
+                Item { Layout.fillWidth: true }
+                Text {
+                  text: Storage.getDetectiveRank(root.hostWidget ? root.hostWidget.sessionsCompleted : 0)
+                  font.family: Style.font.family
+                  font.bold: true
+                  font.pixelSize: 10
+                  color: Color.foreground
+                }
+              }
+
+              // Row 1: Cases Summary + Clear Done Button
+              RowLayout {
+                Layout.fillWidth: true
+                spacing: Style.space(6)
+
+                Text {
+                  text: "Case Files:"
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.bodySmall
+                  font.bold: true
+                  color: Color.muted
+                }
+
+                Text {
+                  readonly property int activeCount: root.agendaList.filter(function(it){ return !it.completed }).length
+                  readonly property int resolvedCount: root.agendaList.filter(function(it){ return it.completed }).length
+                  text: activeCount + " Active  •  " + resolvedCount + " Resolved"
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.bodySmall
+                  font.bold: true
+                  color: Color.foreground
+                }
+
+                Item { Layout.fillWidth: true }
+
+                Rectangle {
+                  height: Style.space(24)
+                  implicitWidth: Style.space(80)
+                  radius: Style.space(3)
+                  color: Color.background
+                  border.color: Color.muted
+                  border.width: 1
+
+                  Text {
+                    anchors.centerIn: parent
+                    text: "Clear Done"
+                    font.family: Style.font.family
+                    font.pixelSize: 9
+                    font.bold: true
+                    color: Color.foreground
+                  }
+                  MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.clearResolvedMissions()
+                  }
+                }
+              }
+
+              // Row 2: Focus Time + Copy Standup Button
+              RowLayout {
+                Layout.fillWidth: true
+                spacing: Style.space(6)
+
+                Text {
+                  text: "Patrol Time:"
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.bodySmall
+                  font.bold: true
+                  color: Color.muted
+                }
+
+                Text {
+                  text: Storage.formatDuration(root.hostWidget ? root.hostWidget.totalFocusSeconds : 0) + " (" + (root.hostWidget ? root.hostWidget.sessionsCompleted : 0) + " missions)"
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.bodySmall
+                  font.bold: true
+                  color: Color.accent
+                }
+
+                Item { Layout.fillWidth: true }
+
+                Rectangle {
+                  height: Style.space(24)
+                  implicitWidth: Style.space(90)
+                  radius: Style.space(3)
+                  color: Color.accent
+
+                  Text {
+                    anchors.centerIn: parent
+                    text: "Copy Standup"
+                    font.family: Style.font.family
+                    font.pixelSize: 9
+                    font.bold: true
+                    color: Color.background
+                  }
+                  MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.exportDebrief()
+                  }
+                }
+              }
+            }
+          }
+
+          // ── Tactical System Controls ──────────────────────────────────────
           Text {
-            text: "Batcave Terminal Operations"
+            text: "Tactical System Controls"
             font.family: Style.font.family
             font.bold: true
-            font.pixelSize: Style.font.body
-            color: Color.accent
+            font.pixelSize: Style.font.bodySmall
+            color: Color.foreground
           }
 
           GridLayout {
@@ -1188,41 +1506,187 @@ Item {
             columnSpacing: Style.space(8)
             rowSpacing: Style.space(8)
 
-            Repeater {
-              model: [
-                { label: "Batcave Lockdown",  cmd: ["omarchy", "system", "lock"] },
-                { label: "Night Light",       cmd: ["omarchy", "toggle", "nightlight"] },
-                { label: "Screenshot",        cmd: ["omarchy", "capture", "screenshot"] },
-                { label: "Toggle Mute",       cmd: ["bash", "-c", "pactl set-sink-mute @DEFAULT_SINK@ toggle"] },
-                { label: "Restart Shell",     cmd: ["omarchy", "restart", "shell"] },
-                { label: "Bat-Signal Mode",   cmd: [] }
-              ]
-              delegate: Rectangle {
-                Layout.fillWidth: true
-                height: Style.space(38)
-                radius: Style.space(4)
-                color: Color.background
-                border.color: Color.muted
-                border.width: 1
+            // Bat-Signal Mode
+            Rectangle {
+              Layout.fillWidth: true
+              height: Style.space(38)
+              radius: Style.space(4)
+              color: Color.background
+              border.color: (root.hostWidget && root.hostWidget.batSignalActive) ? Color.accent : Color.muted
+              border.width: (root.hostWidget && root.hostWidget.batSignalActive) ? 1.5 : 1
 
+              RowLayout {
+                anchors.centerIn: parent
+                spacing: 6
+                Text { text: "⚡"; font.pixelSize: Style.font.body }
                 Text {
-                  anchors.centerIn: parent
-                  text: modelData.label
+                  text: "Bat-Signal Mode"
                   font.family: Style.font.family
-                  font.pixelSize: Style.font.body
+                  font.pixelSize: Style.font.bodySmall
+                  font.bold: true
+                  color: (root.hostWidget && root.hostWidget.batSignalActive) ? Color.accent : Color.foreground
+                }
+              }
+              MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
+                  if (root.hostWidget) root.hostWidget.toggleBatSignal()
+                }
+              }
+            }
+
+            // Mute
+            Rectangle {
+              Layout.fillWidth: true
+              height: Style.space(38)
+              radius: Style.space(4)
+              color: Color.background
+              border.color: Color.muted
+              border.width: 1
+
+              RowLayout {
+                anchors.centerIn: parent
+                spacing: 6
+                Text { text: "🔇"; font.pixelSize: Style.font.body }
+                Text {
+                  text: "Toggle Mute"
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.bodySmall
+                  font.bold: true
                   color: Color.foreground
                 }
-                MouseArea {
-                  anchors.fill: parent
-                  cursorShape: Qt.PointingHandCursor
-                  onClicked: {
-                    if (modelData.label === "Bat-Signal Mode") {
-                      if (root.hostWidget) root.hostWidget.batSignalActive = !root.hostWidget.batSignalActive
-                    } else {
-                      Quickshell.execDetached(modelData.cmd)
-                    }
-                    root.close()
-                  }
+              }
+              MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
+                  Quickshell.execDetached(["bash", "-c", "pactl set-sink-mute @DEFAULT_SINK@ toggle"])
+                  root.close()
+                }
+              }
+            }
+
+            // Night Light
+            Rectangle {
+              Layout.fillWidth: true
+              height: Style.space(38)
+              radius: Style.space(4)
+              color: Color.background
+              border.color: Color.muted
+              border.width: 1
+
+              RowLayout {
+                anchors.centerIn: parent
+                spacing: 6
+                Text { text: "🌙"; font.pixelSize: Style.font.body }
+                Text {
+                  text: "Night Light"
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.bodySmall
+                  font.bold: true
+                  color: Color.foreground
+                }
+              }
+              MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
+                  Quickshell.execDetached(["omarchy", "toggle", "nightlight"])
+                  root.close()
+                }
+              }
+            }
+
+            // Screenshot
+            Rectangle {
+              Layout.fillWidth: true
+              height: Style.space(38)
+              radius: Style.space(4)
+              color: Color.background
+              border.color: Color.muted
+              border.width: 1
+
+              RowLayout {
+                anchors.centerIn: parent
+                spacing: 6
+                Text { text: "📸"; font.pixelSize: Style.font.body }
+                Text {
+                  text: "Screenshot"
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.bodySmall
+                  font.bold: true
+                  color: Color.foreground
+                }
+              }
+              MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
+                  Quickshell.execDetached(["omarchy", "capture", "screenshot"])
+                  root.close()
+                }
+              }
+            }
+
+            // Lockdown
+            Rectangle {
+              Layout.fillWidth: true
+              height: Style.space(38)
+              radius: Style.space(4)
+              color: Color.background
+              border.color: Color.muted
+              border.width: 1
+
+              RowLayout {
+                anchors.centerIn: parent
+                spacing: 6
+                Text { text: "🔒"; font.pixelSize: Style.font.body }
+                Text {
+                  text: "Lock Screen"
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.bodySmall
+                  font.bold: true
+                  color: Color.foreground
+                }
+              }
+              MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
+                  Quickshell.execDetached(["omarchy", "system", "lock"])
+                  root.close()
+                }
+              }
+            }
+
+            // Reload Shell
+            Rectangle {
+              Layout.fillWidth: true
+              height: Style.space(38)
+              radius: Style.space(4)
+              color: Color.background
+              border.color: Color.muted
+              border.width: 1
+
+              RowLayout {
+                anchors.centerIn: parent
+                spacing: 6
+                Text { text: "🔄"; font.pixelSize: Style.font.body }
+                Text {
+                  text: "Reload Shell"
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.bodySmall
+                  font.bold: true
+                  color: Color.foreground
+                }
+              }
+              MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
+                  Quickshell.execDetached(["omarchy", "restart", "shell"])
+                  root.close()
                 }
               }
             }

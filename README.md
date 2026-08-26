@@ -1,53 +1,116 @@
-# 🦇 BatPuter — Wayne Tech Tactical Productivity HUD
+# 🦇 BatPuter v3.0 — Wayne Tech Tactical Productivity HUD
 
 [![Omarchy Plugin](https://img.shields.io/badge/Omarchy-Plugin-00d2ff.svg)](https://omarchyplugins.com)
+[![Release](https://img.shields.io/badge/Release-v3.0.0-blue.svg)](https://github.com/phaze7r/batputer/releases)
+[![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20Wayland%20%7C%20Hyprland-blueviolet.svg)](https://omarchy.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 > *"The Batcomputer is online, Master Wayne."*  
-> **BatPuter** is a Gotham-themed tactical daily productivity HUD for the [Omarchy](https://omarchy.org) Linux desktop. Manage your daily agendas, organize tactical to-do lists, log forensic notes, and execute focused patrol sprints — all styled like the World's Greatest Detective's Batcave terminal.
+> **BatPuter** is a Gotham-themed tactical daily productivity HUD for the [Omarchy](https://omarchy.org) Linux desktop. Manage your daily agendas, organize tactical to-do lists, log forensic notes, execute customizable patrol sprints, monitor live system telemetry, and export daily standup debriefs — all styled like the World's Greatest Detective's Batcave terminal.
 
 <p align="center">
-  <img src="assets/preview_dark.png" alt="BatPuter HUD Dark Theme" width="48%">
-  <img src="assets/preview_light.png" alt="BatPuter HUD Light Theme" width="48%">
+  <img src="assets/black_Preview_v3.png" alt="BatPuter HUD Dark Theme" width="48%">
+  <img src="assets/white_Preview_v3.png" alt="BatPuter HUD Light Theme" width="48%">
 </p>
 
 ---
 
-## ⚡ Productivity Features (Batcave Style)
+## 📑 Table of Contents
 
-- 📂 **Case Files (Daily Agenda & To-Do Lists)**:
-  - Track your daily tasks and mission objectives disguised as active Gotham case files.
-  - Threat-level priority tags: `OMEGA` (Critical), `ALPHA` (High), `BETA` (Medium), and `GAMMA` (Low).
-  - One-click task completion with tactical strike-through and case resolution metrics.
+- [Interface Gallery](#-interface-gallery)
+- [Key Features](#-key-features)
+- [Controls & Keybindings](#-controls--keybindings)
+- [Installation](#-installation)
+- [IPC & Scripting Commands](#-ipc--scripting-commands)
+- [Architecture & Files](#-architecture--files)
+- [Uninstallation](#-uninstallation)
+- [License](#-license)
 
-- 📜 **Forensic Dossiers (Multi-Tab Notes & Scratchpad)**:
-  - Multi-tab scratchpad system (`Forensic Analysis`, `Case Dossier`, `Wayne Directives`, plus unlimited custom tabs).
-  - Store quick thoughts, code snippets, daily logs, and meeting debriefs with live byte counting and instant autosave.
+---
 
-- ⏱ **Tactical Patrol Focus Timer (Pomodoro Engine)**:
-  - Stay hyper-focused during work blocks with a radar-sweep circular countdown timer.
-  - Preset intervals: `25m Patrol Focus`, `50m Deep Investigation`, `5m Tactical Rest`, and `15m Batcave Recharge`.
-  - Live timer badge on the status bar and daily completed mission telemetry.
+## 📸 Interface Gallery
 
-- 🎙 **Alfred Pennyworth Comms & Check-Ins**:
-  - Encrypted check-in channel delivering periodic focus prompts and tactical encouragement to keep you on mission.
-  - Customizable Detective Callsign (`Master Wayne`, `The Detective`, `Bruce`, or your own custom name).
-  - Manual "Request Briefing" button for instant tactical check-ins.
+<p align="center">
+  <img src="assets/ss_cases_tab.png" alt="Case Files Tab" width="48%">
+  <img src="assets/ss_notes_tab.png" alt="Forensic Notes Tab" width="48%">
+</p>
+<p align="center">
+  <img src="assets/ss_alfred_tab.png" alt="Alfred Comms Tab" width="48%">
+  <img src="assets/ss_dashbaord_tab.png" alt="Mission Dashboard Tab" width="48%">
+</p>
 
-- 📊 **Real-time Batcave Telemetry**:
-  - Real-time CPU load, memory usage, and Wayne Tech quantum encryption link status built directly into the HUD header.
+---
 
-- ⚡ **Batcave Operations (Quick Ops)**:
-  - Fast desktop shortcuts: Batcave Lockdown, Gotham Night Light, HUD Recon Screenshot, Comms Silence (Mute), Reboot Batcomputer, and Bat-Signal Beacon mode.
+## ⚡ Key Features
 
-- 🦇 **Adaptive Cowl Icon**:
-  - Vectorized Dark Knight cowl silhouette that automatically shifts to crisp solid white on dark bars and deep solid black on light bars.
+### ⏱ Tactical Patrol Focus Engine (Pomodoro)
+- **Full Duration Customization**: Choose from quick presets (`15m`, `25m`, `45m`, `60m`) or use inline `[- 5m]` / `[+ 5m]` steppers to set any custom minute duration.
+- **Zero-Shift Radial Progress Ring**: Canvas-drawn circular progress arc on the status bar icon that depletes as time elapses without expanding or shifting neighboring bar icons.
+- **🔔 Wayne Tech Finish Chime**: Cinematic audio alert (`bat_finish.wav`) plays automatically when a patrol or break session concludes.
+
+### ⚡ Animated Bat-Signal Beacon
+- Toggle the Bat-Signal mode from the dashboard to illuminate the status bar icon with an animated golden searchlight aura halo (`#ffd60a`) with rhythmic breathing pulse effects.
+
+### 📊 Daily Mission Dashboard & Quick Controls
+- **Live Task Overview**: Real-time counter of Active vs Resolved cases.
+- **`Clear Done`**: One-click cleanup to purge all checked-off cases.
+- **`Copy Standup`**: Formats today's completed cases, active tasks, patrol focus time, and notes into clean Markdown and copies it straight to your clipboard (`wl-copy`).
+- **Tactical System Grid**: One-click controls for Bat-Signal Beacon, Audio Mute, Night Light, Screenshot, Screen Lock, and Shell Reload.
+
+### 🏆 Detective Ranks & Daily Streaks
+- **Daily Focus Streaks**: Tracks consecutive daily focus sessions (`🔥 5d Streak`).
+- **Detective Progression**: Earn higher detective ranks as you complete missions:
+  - 🥋 *Cadet Investigator* (0–2 sessions)
+  - 🔍 *Gotham Detective* (3–9 sessions)
+  - 🦇 *Caped Crusader* (10–24 sessions)
+  - 🌌 *The Dark Knight* (25+ sessions)
+
+### 📈 Live Batcave Telemetry HUD
+- High-contrast, prominent real-time monitors built directly into the HUD header:
+  - **CPU Load**: Live load average from `/proc/loadavg`.
+  - **RAM Usage**: Real-time memory percentage from `/proc/meminfo`.
+  - **Disk Space**: Partition utilization from root mount.
+  - **Network Speeds**: Live Download (`↓`) and Upload (`↑`) rates from `/proc/net/dev`.
+  - **Wayne Secure Link**: Quantum encryption status indicator.
+
+### 📂 Active Case Files & Objective Tracking
+- Threat-level priority classifications:
+  - 🔴 `OMEGA` (Critical)
+  - 🟠 `ALPHA` (High)
+  - 🟡 `BETA` (Medium)
+  - 🟢 `GAMMA` (Low)
+- One-click task resolution with tactical strike-through and minimal `Del` action.
+
+### 📝 Simplified 3-Category Forensic Notes
+- Fixed, reliable 3-category scratchpad:
+  - `Daily Log`
+  - `Scratchpad`
+  - `Snippets`
+- **`Promote to Case`**: Promotes any note line or thought directly into an active `ALPHA` case file with one click.
+- Live character counter and instant autosave.
+
+### 🦇 Theme-Adaptive Cowl Silhouette
+- Solid-fill, anti-aliased Dark Knight cowl icon that automatically shifts to crisp white on dark bars and deep black on light bars based on ambient background luminance.
+
+---
+
+## 🎮 Controls & Keybindings
+
+| Action | Shortcut / Control |
+| :--- | :--- |
+| **Toggle BatPuter HUD** | Left-Click Bar Icon / `SUPER + B` |
+| **Start / Pause Patrol Timer** | Right-Click Bar Icon |
+| **Reset Patrol Timer** | Middle-Click Bar Icon |
+| **Adjust Focus Duration** | Click Presets (`15m`, `25m`, `45m`, `60m`) or `[- 5m]` / `[+ 5m]` |
+| **Export Daily Standup** | Click `Export Daily Standup Debrief` in Patrol or Dashboard Tab |
+| **Toggle Bat-Signal Aura** | Click `⚡ Bat-Signal Mode` in Dashboard Tab |
+| **Edit Detective Callsign** | Click `👤 [Callsign]` badge in HUD Header |
 
 ---
 
 ## 📦 Installation
 
-### Method 1: Via Omarchy CLI (Recommended)
+### Method 1: Via Omarchy Plugin Manager (Recommended)
 ```bash
 omarchy plugin add https://github.com/phaze7r/batputer.git --enable
 ```
@@ -60,14 +123,45 @@ omarchy restart shell
 
 ---
 
-## 🎮 Controls & Keybindings
+## 🤖 IPC & Scripting Commands
 
-| Action | Control |
-| :--- | :--- |
-| **Toggle BatPuter HUD** | Left-Click Bar Icon / `SUPER + B` |
-| **Start / Pause Patrol Timer** | Right-Click Bar Icon |
-| **Reset Patrol Timer** | Middle-Click Bar Icon |
-| **Edit Detective Callsign** | Click `👤 [Callsign]` badge in HUD Header |
+BatPuter exposes IPC endpoints for custom Hyprland keybinds and scripts:
+
+```bash
+# Toggle HUD open / close
+omarchy-shell batputer toggle
+
+# Focus Patrol Timer Controls
+omarchy-shell batputer startFocus
+omarchy-shell batputer pauseFocus
+omarchy-shell batputer resetFocus
+
+# Toggle Bat-Signal Beacon
+omarchy-shell batputer toggleSignal
+
+# Request Tactical Briefing from Alfred
+omarchy-shell batputer checkIn
+```
+
+---
+
+## 📁 Architecture & Files
+
+```
+batputer/
+├── manifest.json         # Omarchy Quattro Plugin Manifest (v3.0.0)
+├── BarWidget.qml         # Bar integration, radial progress ring, IPC handlers
+├── Panel.qml             # Tactical Operations HUD, Telemetry, Cases, Notes, Alfred
+├── BatmanMaskIcon.qml    # Theme-aware cowl icon with Bat-Signal searchlight halo
+├── Storage.js            # Telemetry, speed formatting, rank calculations & debrief exporter
+├── LICENSE               # MIT License
+├── README.md             # Documentation & showcase
+└── assets/
+    ├── bat_finish.wav    # Cinematic Wayne Tech chime
+    ├── batman_white.png  # Solid white cowl silhouette
+    ├── batman_black.png  # Solid black cowl silhouette
+    └── *.png             # Interface screenshots & preview assets
+```
 
 ---
 
@@ -82,4 +176,4 @@ omarchy restart shell
 
 ## 📄 License
 
-This project is licensed under the [MIT License](LICENSE).
+Distributed under the [MIT License](LICENSE). Built for the [Omarchy](https://omarchy.org) Linux Desktop ecosystem.

@@ -7,11 +7,9 @@ Item {
   property real iconSize: Style.space(18)
   property bool active: false
   property bool pulsing: false
+  property bool batSignalActive: false
   property color maskColor: Color.foreground
 
-  // Theme-aware detection:
-  // Light background (lum >= 0.5) -> black icon
-  // Dark background (lum < 0.5) -> white icon
   readonly property bool useWhiteIcon: {
     try {
       var bg = Color.background
@@ -35,6 +33,34 @@ Item {
   width: iconSize
   height: iconSize
 
+  // Bat-Signal Illuminated Searchlight Halo
+  Rectangle {
+    id: signalHalo
+    visible: root.batSignalActive
+    anchors.centerIn: parent
+    width: root.iconSize * 1.45
+    height: root.iconSize * 1.45
+    radius: width / 2
+    color: Qt.rgba(1.0, 0.84, 0.0, 0.25)
+    border.color: "#ffd60a"
+    border.width: 1.5
+    scale: 1.0
+
+    SequentialAnimation on opacity {
+      running: root.batSignalActive
+      loops: Animation.Infinite
+      NumberAnimation { to: 0.95; duration: 800; easing.type: Easing.InOutQuad }
+      NumberAnimation { to: 0.30; duration: 800; easing.type: Easing.InOutQuad }
+    }
+
+    SequentialAnimation on scale {
+      running: root.batSignalActive
+      loops: Animation.Infinite
+      NumberAnimation { to: 1.25; duration: 800; easing.type: Easing.InOutQuad }
+      NumberAnimation { to: 0.95; duration: 800; easing.type: Easing.InOutQuad }
+    }
+  }
+
   Image {
     id: img
     anchors.fill: parent
@@ -44,7 +70,7 @@ Item {
     smooth: true
     mipmap: true
     fillMode: Image.PreserveAspectFit
-    opacity: root.pulsing ? pulseAnim.currentOpacity : (root.active ? 1.0 : 0.95)
+    opacity: root.pulsing ? pulseAnim.currentOpacity : 1.0
 
     Behavior on opacity {
       NumberAnimation { duration: 150 }

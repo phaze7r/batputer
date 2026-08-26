@@ -1,5 +1,4 @@
 import QtQuick
-import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
 import qs.Commons
@@ -14,7 +13,7 @@ BarWidget {
   readonly property bool popoutSwitchClosing: panelLoader.item ? panelLoader.item.popoutSwitchClosing === true : false
 
   // Global Pomodoro / Focus State
-  property int timerMode: 0 // 0: Focus (25m), 1: Deep (50m), 2: Short Break (5m), 3: Long Break (15m)
+  property int timerMode: 0 // 0: Focus (25m), 1: Deep (50m), 2: Short Break (5m), 3: Long Break (15m), -1: Custom
   property int timeRemaining: 25 * 60
   property int totalDuration: 25 * 60
   property bool timerRunning: false
@@ -22,6 +21,8 @@ BarWidget {
   property int totalFocusSeconds: 0
   property bool batSignalActive: false
   property string callSign: "Master Wayne"
+  property int streakDays: 1
+  property string lastActiveDate: ""
 
   // Check-in state
   property bool checkInsEnabled: true
@@ -35,7 +36,47 @@ BarWidget {
     printErrors: false
     onLoaded: {
       var d = Storage.parseJsonSafe(text(), null)
-      if (d && d.callSign) root.callSign = d.callSign
+      if (d) {
+        if (d.callSign) root.callSign = d.callSign
+        if (d.sessionsCompleted) root.sessionsCompleted = d.sessionsCompleted
+        if (d.totalFocusSeconds) root.totalFocusSeconds = d.totalFocusSeconds
+        if (d.streakDays) root.streakDays = d.streakDays
+        if (d.lastActiveDate) root.lastActiveDate = d.lastActiveDate
+      }
+      root.checkStreak()
+    }
+  }
+
+  function saveConfig() {
+    var data = {
+      callSign: root.callSign,
+      sessionsCompleted: root.sessionsCompleted,
+      totalFocusSeconds: root.totalFocusSeconds,
+      streakDays: root.streakDays,
+      lastActiveDate: root.lastActiveDate
+    }
+    Quickshell.execDetached(["bash", "-c",
+      "printf '%s' '" + JSON.stringify(data).replace(/'/g, "'\\''") +
+      "' > '" + (Quickshell.env("HOME") || "") + "/.config/omarchy/batputer/config.json'"])
+  }
+
+  function checkStreak() {
+    var today = new Date().toISOString().split("T")[0]
+    if (root.lastActiveDate === "") {
+      root.lastActiveDate = today
+      root.streakDays = 1
+      root.saveConfig()
+    } else if (root.lastActiveDate !== today) {
+      var last = new Date(root.lastActiveDate)
+      var now = new Date(today)
+      var diffDays = Math.round((now - last) / (1000 * 60 * 60 * 24))
+      if (diffDays === 1) {
+        root.streakDays += 1
+      } else if (diffDays > 1) {
+        root.streakDays = 1
+      }
+      root.lastActiveDate = today
+      root.saveConfig()
     }
   }
 
@@ -64,9 +105,19 @@ BarWidget {
     if ("hostWidget" in target) target.hostWidget = root
   }
 
+  function toggleBatSignal() {
+    batSignalActive = !batSignalActive
+    if (batSignalActive) {
+      Quickshell.execDetached(["pw-play", "/home/phaze7r/.config/omarchy/plugins/batputer/assets/bat_finish.wav"])
+      Quickshell.execDetached(["omarchy-notification-send", "Bat-Signal Activated", "Gotham beacon searchlight illuminated.", "-g", "󰢌"])
+    } else {
+      Quickshell.execDetached(["omarchy-notification-send", "Bat-Signal Standby", "Beacon returned to passive surveillance.", "-g", "󰢌"])
+    }
+  }
+
   function startTimer() {
     timerRunning = true
-    Quickshell.execDetached(["omarchy-notification-send", "🦇 BatPuter Focus Mode", "Focus session started. Tactical DND active.", "-g", "󰢌"])
+    Quickshell.execDetached(["omarchy-notification-send", "BatPuter Focus Mode", "Patrol session started for " + root.callSign + ". Tactical DND active.", "-g", "󰢌"])
   }
 
   function pauseTimer() {
@@ -80,7 +131,11 @@ BarWidget {
 
   function resetTimer() {
     timerRunning = false
-    setTimerDuration(timerMode)
+    if (timerMode === -1) {
+      timeRemaining = totalDuration
+    } else {
+      setTimerDuration(timerMode)
+    }
   }
 
   function setTimerDuration(mode) {
@@ -93,22 +148,40 @@ BarWidget {
     timeRemaining = mins * 60
   }
 
+  function setCustomMinutes(mins) {
+    if (mins < 1) mins = 1
+    if (mins > 180) mins = 180
+    timerMode = -1
+    totalDuration = mins * 60
+    timeRemaining = mins * 60
+  }
+
+  function adjustMinutes(delta) {
+    var cur = Math.ceil(timeRemaining / 60)
+    setCustomMinutes(cur + delta)
+  }
+
   function onTimerFinished() {
     timerRunning = false
-    if (timerMode === 0 || timerMode === 1) {
+    // Play Wayne Tech chime
+    Quickshell.execDetached(["pw-play", "/home/phaze7r/.config/omarchy/plugins/batputer/assets/bat_finish.wav"])
+
+    if (timerMode === 0 || timerMode === 1 || timerMode === -1) {
       sessionsCompleted++
       totalFocusSeconds += totalDuration
-      Quickshell.execDetached(["omarchy-notification-send", "🦇 BatPuter Focus Complete", "Excellent work, " + root.callSign + ". Take a tactical break.", "-g", "󰢌"])
+      root.checkStreak()
+      root.saveConfig()
+      Quickshell.execDetached(["omarchy-notification-send", "BatPuter Focus Complete", "Patrol complete, " + root.callSign + ". Rank: " + Storage.getDetectiveRank(root.sessionsCompleted) + ". Take a tactical break.", "-g", "󰢌"])
       setTimerDuration(2) // switch to short break
     } else {
-      Quickshell.execDetached(["omarchy-notification-send", "🦇 BatPuter Break Finished", "Break time is over. Ready for the next objective, " + root.callSign + "?", "-g", "󰢌"])
+      Quickshell.execDetached(["omarchy-notification-send", "BatPuter Break Finished", "Break concluded. Ready for next objective, " + root.callSign + "?", "-g", "󰢌"])
       setTimerDuration(0) // switch to focus
     }
   }
 
   function triggerCheckIn() {
     var prompt = Storage.getNextCheckInPrompt(root.callSign)
-    Quickshell.execDetached(["omarchy-notification-send", "🦇 Alfred Check-in", prompt, "-u", "normal", "-g", "󰢌"])
+    Quickshell.execDetached(["omarchy-notification-send", "Alfred Check-in", prompt, "-u", "normal", "-g", "󰢌"])
     checkInSecondsLeft = checkInIntervalMinutes * 60
   }
 
@@ -160,33 +233,71 @@ BarWidget {
     labelVisible: false
     hasVisualContent: true
     keepSpace: true
-    fixedWidth: root.timerRunning ? -1 : Style.bar.iconSlot
-    horizontalMargin: root.timerRunning ? 8.5 : 0
+    fixedWidth: Style.bar.iconSlot
+    horizontalMargin: 0
     active: root.timerRunning || root.batSignalActive
     activeColor: Color.accent
     useActiveColor: true
-    tooltipText: root.timerRunning 
-      ? "BatPuter (" + Storage.formatTime(root.timeRemaining) + " remaining | Right-Click: Pause)" 
-      : "BatPuter AI Assistant (Click: Open HUD | Right-Click: Start Focus)"
+    tooltipText: root.batSignalActive 
+      ? "Bat-Signal Beacon: ACTIVE // Click to open HUD"
+      : (root.timerRunning 
+          ? "BatPuter Patrol (" + Storage.formatTime(root.timeRemaining) + " remaining | Right-Click: Pause)" 
+          : "BatPuter AI Assistant (Click: Open HUD | Right-Click: Start Patrol)")
 
-    RowLayout {
+    Item {
       anchors.centerIn: parent
-      spacing: Style.space(6)
+      width: Style.space(22)
+      height: Style.space(22)
 
+      // Circular Radial Progress Ring
+      Canvas {
+        id: progressRing
+        anchors.fill: parent
+        visible: root.timerRunning
+
+        onPaint: {
+          var ctx = getContext("2d")
+          ctx.reset()
+          var cx = width / 2
+          var cy = height / 2
+          var radius = (width / 2) - 1.5
+          var progress = (root.totalDuration > 0) ? (root.timeRemaining / root.totalDuration) : 0
+
+          // Background track
+          ctx.beginPath()
+          ctx.arc(cx, cy, radius, 0, 2 * Math.PI)
+          ctx.strokeStyle = Qt.rgba(button.foreground.r, button.foreground.g, button.foreground.b, 0.2)
+          ctx.lineWidth = 1.8
+          ctx.stroke()
+
+          // Active progress arc
+          if (progress > 0) {
+            ctx.beginPath()
+            var startAngle = -Math.PI / 2
+            var endAngle = startAngle + (2 * Math.PI * progress)
+            ctx.arc(cx, cy, radius, startAngle, endAngle, false)
+            ctx.strokeStyle = (root.timerMode === 2 || root.timerMode === 3) ? "#30d158" : Color.accent
+            ctx.lineWidth = 1.8
+            ctx.lineCap = "round"
+            ctx.stroke()
+          }
+        }
+
+        Connections {
+          target: root
+          function onTimeRemainingChanged() { progressRing.requestPaint() }
+          function onTimerRunningChanged() { progressRing.requestPaint() }
+        }
+      }
+
+      // Centered Batman Cowl Icon with Bat-Signal Halo
       BatmanMaskIcon {
-        iconSize: Style.space(18)
+        anchors.centerIn: parent
+        iconSize: Style.space(14)
         maskColor: button.foreground
         active: root.timerRunning || root.batSignalActive
         pulsing: root.timerRunning
-      }
-
-      Text {
-        visible: root.timerRunning
-        text: Storage.formatTime(root.timeRemaining)
-        font.family: Style.font.family
-        font.pixelSize: Style.font.bodySmall
-        font.bold: true
-        color: (root.timerMode === 2 || root.timerMode === 3) ? "#30d158" : Color.accent
+        batSignalActive: root.batSignalActive
       }
     }
 
@@ -211,6 +322,7 @@ BarWidget {
     function startFocus(): void { root.startTimer() }
     function pauseFocus(): void { root.pauseTimer() }
     function resetFocus(): void { root.resetTimer() }
+    function toggleSignal(): void { root.toggleBatSignal() }
     function checkIn(): void { root.triggerCheckIn() }
   }
 }
