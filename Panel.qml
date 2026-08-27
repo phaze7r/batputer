@@ -328,11 +328,32 @@ Item {
     saveMissions(list)
   }
 
+  function sendNotification(title, message) {
+    var isLight = false
+    try {
+      var bg = Color.background
+      var bgCol = Qt.color(bg)
+      var bgLum = 0.299 * bgCol.r + 0.587 * bgCol.g + 0.114 * bgCol.b
+      isLight = (bgLum >= 0.5)
+    } catch(e) {}
+    var iconName = isLight ? "batman_black.png" : "batman_white.png"
+    var iconPath = root.home + "/.config/omarchy/plugins/batputer/assets/" + iconName
+
+    Quickshell.execDetached([
+      "omarchy-notification-send",
+      "--app-name", "BatPuter",
+      "-i", iconPath,
+      "-g", "🦇",
+      title,
+      message
+    ])
+  }
+
   function clearResolvedMissions() {
     var list = root.agendaList.filter(function(it) { return !it.completed })
     root.agendaList = list
     saveMissions(list)
-    Quickshell.execDetached(["omarchy-notification-send", "Cases Cleared", "Completed tasks cleared from active list.", "-g", "󰢌"])
+    sendNotification("Cases Cleared", "Completed tasks cleared from active list.")
   }
 
   function saveMissions(list) {
@@ -360,7 +381,7 @@ Item {
     root.agendaList = Storage.sanitizeAgenda(list)
     saveMissions(root.agendaList)
     root.currentTab = 1
-    Quickshell.execDetached(["omarchy-notification-send", "Case Dossier Created", "Note promoted to active ALPHA case objective.", "-g", "󰢌"])
+    sendNotification("Case Dossier Created", "Note promoted to active ALPHA case objective.")
   }
 
   function exportDebrief() {
@@ -374,7 +395,7 @@ Item {
     )
     clipboardCopyProcess.payload = report
     clipboardCopyProcess.running = true
-    Quickshell.execDetached(["omarchy-notification-send", "Tactical Debrief Copied", "Daily standup report copied to clipboard.", "-g", "󰢌"])
+    sendNotification("Tactical Debrief Copied", "Daily standup report copied to clipboard.")
   }
 
   KeyboardPanel {

@@ -127,19 +127,44 @@ BarWidget {
     ])
   }
 
+  function sendNotification(title, message, urgencyLevel) {
+    var isLight = false
+    try {
+      var bg = Color.background
+      var bgCol = Qt.color(bg)
+      var bgLum = 0.299 * bgCol.r + 0.587 * bgCol.g + 0.114 * bgCol.b
+      isLight = (bgLum >= 0.5)
+    } catch(e) {}
+    var iconName = isLight ? "batman_black.png" : "batman_white.png"
+    var iconPath = root.home + "/.config/omarchy/plugins/batputer/assets/" + iconName
+
+    var args = [
+      "omarchy-notification-send",
+      "--app-name", "BatPuter",
+      "-i", iconPath,
+      "-g", "🦇",
+      title,
+      message
+    ]
+    if (urgencyLevel) {
+      args.push("-u", urgencyLevel)
+    }
+    Quickshell.execDetached(args)
+  }
+
   function toggleBatSignal() {
     batSignalActive = !batSignalActive
     if (batSignalActive) {
       playChime()
-      Quickshell.execDetached(["omarchy-notification-send", "Bat-Signal Activated", "Gotham beacon searchlight illuminated.", "-g", "󰢌"])
+      sendNotification("Bat-Signal Activated", "Gotham beacon searchlight illuminated.")
     } else {
-      Quickshell.execDetached(["omarchy-notification-send", "Bat-Signal Standby", "Beacon returned to passive surveillance.", "-g", "󰢌"])
+      sendNotification("Bat-Signal Standby", "Beacon returned to passive surveillance.")
     }
   }
 
   function startTimer() {
     timerRunning = true
-    Quickshell.execDetached(["omarchy-notification-send", "BatPuter Focus Mode", "Patrol session started for " + root.callSign + ". Tactical DND active.", "-g", "󰢌"])
+    sendNotification("BatPuter Focus Mode", "Patrol session started for " + root.callSign + ". Tactical DND active.")
   }
 
   function pauseTimer() {
@@ -192,17 +217,17 @@ BarWidget {
       totalFocusSeconds += totalDuration
       root.checkStreak()
       root.saveConfig()
-      Quickshell.execDetached(["omarchy-notification-send", "BatPuter Focus Complete", "Patrol complete, " + root.callSign + ". Rank: " + Storage.getDetectiveRank(root.sessionsCompleted) + ". Take a tactical break.", "-g", "󰢌"])
+      sendNotification("BatPuter Focus Complete", "Patrol complete, " + root.callSign + ". Rank: " + Storage.getDetectiveRank(root.sessionsCompleted) + ". Take a tactical break.")
       setTimerDuration(2)
     } else {
-      Quickshell.execDetached(["omarchy-notification-send", "BatPuter Break Finished", "Break concluded. Ready for next objective, " + root.callSign + "?", "-g", "󰢌"])
+      sendNotification("BatPuter Break Finished", "Break concluded. Ready for next objective, " + root.callSign + "?")
       setTimerDuration(0)
     }
   }
 
   function triggerCheckIn() {
     var prompt = Storage.getNextCheckInPrompt(root.callSign)
-    Quickshell.execDetached(["omarchy-notification-send", "Alfred Check-in", prompt, "-u", "normal", "-g", "󰢌"])
+    sendNotification("Alfred Check-in", prompt, "normal")
     checkInSecondsLeft = checkInIntervalMinutes * 60
   }
 
