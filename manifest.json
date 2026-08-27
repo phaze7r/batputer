@@ -4,7 +4,7 @@
   "name": "BatPuter",
   "version": "3.0.0",
   "author": "phaze7r",
-  "description": "Gotham-themed tactical productivity HUD for Omarchy with customizable Pomodoro focus, case files, forensic notes, Alfred comms, ambient rain focus, and daily debrief export.",
+  "description": "Gotham-themed tactical productivity HUD for Omarchy with customizable Pomodoro focus, live system telemetry, case files, forensic notes, Alfred comms, and daily standup debrief export.",
   "kinds": ["bar-widget"],
   "activation": "on-demand",
   "entryPoints": {

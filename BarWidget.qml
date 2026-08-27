@@ -118,10 +118,19 @@ BarWidget {
     if ("hostWidget" in target) target.hostWidget = root
   }
 
+  function playChime() {
+    Quickshell.execDetached([
+      "bash", "-c",
+      "pw-play \"$1\" 2>/dev/null || paplay \"$1\" 2>/dev/null || aplay \"$1\" 2>/dev/null",
+      "--",
+      root.home + "/.config/omarchy/plugins/batputer/assets/bat_finish.wav"
+    ])
+  }
+
   function toggleBatSignal() {
     batSignalActive = !batSignalActive
     if (batSignalActive) {
-      Quickshell.execDetached(["pw-play", root.home + "/.config/omarchy/plugins/batputer/assets/bat_finish.wav"])
+      playChime()
       Quickshell.execDetached(["omarchy-notification-send", "Bat-Signal Activated", "Gotham beacon searchlight illuminated.", "-g", "󰢌"])
     } else {
       Quickshell.execDetached(["omarchy-notification-send", "Bat-Signal Standby", "Beacon returned to passive surveillance.", "-g", "󰢌"])
@@ -176,7 +185,7 @@ BarWidget {
 
   function onTimerFinished() {
     timerRunning = false
-    Quickshell.execDetached(["pw-play", root.home + "/.config/omarchy/plugins/batputer/assets/bat_finish.wav"])
+    playChime()
 
     if (timerMode === 0 || timerMode === 1 || timerMode === -1) {
       sessionsCompleted++
