@@ -188,7 +188,7 @@ BarWidget {
   function setTimerDuration(mode) {
     timerMode = mode
     var mins = 25
-    if (mode === 1) mins = 50
+    if (mode === 1) mins = 60
     else if (mode === 2) mins = 5
     else if (mode === 3) mins = 15
     totalDuration = mins * 60

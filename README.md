@@ -1,12 +1,12 @@
-# 🦇 BatPuter v3.0 — Wayne Tech Tactical Productivity HUD
+# 🦇 BatPuter v3.1 — Wayne Tech Tactical Productivity HUD
 
 [![Omarchy Plugin](https://img.shields.io/badge/Omarchy-Plugin-00d2ff.svg)](https://omarchyplugins.com)
-[![Release](https://img.shields.io/badge/Release-v3.0.0-blue.svg)](https://github.com/phaze7r/batputer/releases)
+[![Release](https://img.shields.io/badge/Release-v3.1.0-blue.svg)](https://github.com/phaze7r/batputer/releases)
 [![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20Wayland%20%7C%20Hyprland-blueviolet.svg)](https://omarchy.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 > *"The Batcomputer is online, Master Wayne."*  
-> **BatPuter** is a Gotham-themed tactical daily productivity HUD for the [Omarchy](https://omarchy.org) Linux desktop. Manage your daily agendas, organize tactical to-do lists, log forensic notes, execute customizable patrol sprints, monitor live system telemetry, and export daily standup debriefs — all styled like the World's Greatest Detective's Batcave terminal.
+> **BatPuter** is a Gotham-themed tactical daily productivity HUD for the [Omarchy](https://omarchy.org) Linux desktop. Manage your daily agendas, organize tactical to-do lists, log forensic notes, execute customizable patrol sprints with a perimeter Batarang chronometer, monitor live system telemetry, and export daily standup debriefs — all styled like the World's Greatest Detective's Batcave terminal.
 
 <p align="center">
   <img src="assets/black_Preview_v3.png" alt="BatPuter HUD Dark Theme" width="48%">
@@ -18,6 +18,7 @@
 ## 📑 Table of Contents
 
 - [Interface Gallery](#-interface-gallery)
+- [What's New in v3.1](#-whats-new-in-v31)
 - [Key Features](#-key-features)
 - [Controls & Keybindings](#-controls--keybindings)
 - [Installation](#-installation)
@@ -30,6 +31,13 @@
 
 ## 📸 Interface Gallery
 
+### ⏱ v3.1 Tactical Batarang Chronometer (Light & Dark)
+<p align="center">
+  <img src="assets/ss_darktheme_v3.1_updated_pomodoro_clock.png" alt="v3.1 Dark Theme Batarang Clock" width="48%">
+  <img src="assets/ss_lighttheme_v3.1_updated_pomodoro_clock.png" alt="v3.1 Light Theme Batarang Clock" width="48%">
+</p>
+
+### 📂 Tactical Operations & Intelligence Tabs
 <p align="center">
   <img src="assets/ss_cases_tab.png" alt="Case Files Tab" width="48%">
   <img src="assets/ss_notes_tab.png" alt="Forensic Notes Tab" width="48%">
@@ -41,12 +49,23 @@
 
 ---
 
+## 🚀 What's New in v3.1
+
+* **🦇 Authentic Dark Knight Batarang Chronometer**: Replaced the circular radar clock with an exact vector-drawn Dark Knight Batarang silhouette. The glowing outer perimeter dynamically sweeps and depletes as patrol time counts down.
+* **🎛 Unified Tactical Control Dock**: Consolidated presets and steppers into an ultra-clean, ergonomic 2-row control system (`[-5m]` `[15m]` `[25m]` `[45m]` `[60m]` `[+5m]` + Primary Action Trigger).
+* **🔔 Synthesized Wayne Tech Chime**: Upgraded alert sound to a rich, high-gain 3-tone chime sequence with PipeWire (`pw-play`) and PulseAudio (`paplay`) fallbacks.
+* **🌓 Theme-Adaptive Desktop Notifications**: Dynamic contrast detection for desktop toasts (uses pure black cowl icon on light themes and crisp white cowl icon on dark themes).
+* **🛡 Security & Marketplace Compliance**: 100% compliant with Omarchy security guidelines (safe JSON deserialization, PlainText enforcement, and secure process stdin streaming).
+
+---
+
 ## ⚡ Key Features
 
 ### ⏱ Tactical Patrol Focus Engine (Pomodoro)
-- **Full Duration Customization**: Choose from quick presets (`15m`, `25m`, `45m`, `60m`) or use inline `[- 5m]` / `[+ 5m]` steppers to set any custom minute duration.
-- **Zero-Shift Radial Progress Ring**: Canvas-drawn circular progress arc on the status bar icon that depletes as time elapses without expanding or shifting neighboring bar icons.
-- **🔔 Wayne Tech Finish Chime**: Cinematic audio alert (`bat_finish.wav`) plays automatically when a patrol or break session concludes.
+- **Authentic Batarang Perimeter Timer**: Outer blade silhouette glows and acts as an exact progress meter during patrol focus and rest cycles.
+- **Unified Duration Dock**: Instant 1-click selection for presets (`15m`, `25m`, `45m`, `60m`) or micro-adjustments via inline `[-5m]` and `[+5m]` steppers.
+- **Zero-Shift Radial Progress Ring**: Bar icon features a non-shifting circular progress arc on the main status bar.
+- **🔔 Wayne Tech Finish Chime**: Rich audio alert (`bat_finish.wav`) triggers upon session completion.
 
 ### ⚡ Animated Bat-Signal Beacon
 - Toggle the Bat-Signal mode from the dashboard to illuminate the status bar icon with an animated golden searchlight aura halo (`#ffd60a`) with rhythmic breathing pulse effects.

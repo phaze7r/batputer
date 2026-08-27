@@ -464,7 +464,7 @@ Item {
                 spacing: 4
                 Rectangle { width: 6; height: 6; radius: 3; color: "#30d158" }
                 Text {
-                  text: "BATCAVE v3.0"
+                  text: "BATCAVE v3.1"
                   textFormat: Text.PlainText
                   font.family: Style.font.family
                   font.pixelSize: 9
@@ -723,22 +723,49 @@ Item {
           anchors.fill: parent
           spacing: Style.space(12)
 
-          // ── Large Minimal Wayne Tech Sonar Chronometer ──────────────────
+          // ── Exact Dark Knight Batarang Chronometer (From User Blueprint) ────
           Item {
             Layout.alignment: Qt.AlignHCenter
-            width: Style.space(185)
-            height: Style.space(185)
+            width: Style.space(330)
+            height: Style.space(175)
 
             Canvas {
-              id: sonarCanvas
+              id: batarangCanvas
               anchors.fill: parent
+
+              property var batPts: [
+                [-1.0, -0.0033], [-0.9647, -0.1973], [-0.8941, -0.4649], [-0.7922, -0.7993], [-0.7255, -0.9666], 
+                [-0.7216, -0.5251], [-0.698, -0.5117], [-0.4941, -0.4582], [-0.2471, -0.4716], [-0.2235, -0.4916], 
+                [-0.1922, -0.5853], [-0.1255, -1.0], [-0.0784, -0.7124], [-0.0588, -0.7124], [-0.0196, -0.7592], 
+                [0.0157, -0.7592], [0.0549, -0.7057], [0.0784, -0.7057], [0.0902, -0.7324], [0.1255, -1.0], 
+                [0.2, -0.505], [0.2196, -0.4783], [0.2706, -0.4582], [0.4, -0.4582], [0.5686, -0.4916], 
+                [0.7176, -0.5452], [0.7216, -0.9933], [0.8078, -0.7993], [0.902, -0.4783], [0.9922, -0.0702], 
+                [1.0, 0.0702], [0.9529, 0.311], [0.8627, 0.6388], [0.8039, 0.7993], [0.7098, 0.9866], 
+                [0.7059, 0.5251], [0.6863, 0.5117], [0.6078, 0.5117], [0.5255, 0.5652], [0.451, 0.6656], 
+                [0.4039, 0.7726], [0.3569, 0.6589], [0.2941, 0.5719], [0.2588, 0.5518], [0.1843, 0.5652], 
+                [0.1373, 0.6187], [0.0941, 0.7057], [0.0039, 1.0], [-0.0941, 0.7057], [-0.1882, 0.5652], 
+                [-0.2353, 0.5452], [-0.2941, 0.5585], [-0.3412, 0.6054], [-0.4078, 0.7391], [-0.4431, 0.6522], 
+                [-0.502, 0.5585], [-0.5686, 0.505], [-0.6392, 0.4916], [-0.702, 0.5184], [-0.7059, 1.0], 
+                [-0.7686, 0.8796], [-0.8549, 0.6388], [-0.9569, 0.2642], [-1.0, 0.01]
+              ]
+
+              function drawExactBatarang(ctx, cx, cy, rx, ry) {
+                ctx.beginPath()
+                ctx.moveTo(cx + batPts[0][0] * rx, cy + batPts[0][1] * ry)
+                for (var i = 1; i < batPts.length; i++) {
+                  ctx.lineTo(cx + batPts[i][0] * rx, cy + batPts[i][1] * ry)
+                }
+                ctx.closePath()
+              }
 
               onPaint: {
                 var ctx = getContext("2d")
                 ctx.reset()
                 var cx = width / 2
                 var cy = height / 2
-                var radius = (width / 2) - 6
+                var rx = (width - 16) / 2
+                var ry = (height - 16) / 2
+
                 var progress = (root.hostWidget && root.hostWidget.totalDuration > 0)
                   ? (root.hostWidget.timeRemaining / root.hostWidget.totalDuration)
                   : 1.0
@@ -746,72 +773,49 @@ Item {
                 var isBreak = root.hostWidget && (root.hostWidget.timerMode === 2 || root.hostWidget.timerMode === 3)
                 var arcColor = isBreak ? "#30d158" : Color.accent
 
-                // 1. Draw 12 Military Chrono Ticks
-                for (var i = 0; i < 12; i++) {
-                  var angle = (i * 30) * Math.PI / 180
-                  var isMajor = (i % 3 === 0)
-                  var tickLen = isMajor ? 6.5 : 3.5
-                  var rInner = radius - tickLen
-                  var rOuter = radius + 1
+                // 1. Translucent Carbon Armor Composite Body Fill
+                drawExactBatarang(ctx, cx, cy, rx, ry)
+                ctx.fillStyle = Qt.rgba(Color.foreground.r, Color.foreground.g, Color.foreground.b, 0.06)
+                ctx.fill()
 
-                  ctx.beginPath()
-                  ctx.moveTo(cx + rInner * Math.cos(angle), cy + rInner * Math.sin(angle))
-                  ctx.lineTo(cx + rOuter * Math.cos(angle), cy + rOuter * Math.sin(angle))
-                  ctx.strokeStyle = isMajor ? Color.muted : Qt.rgba(Color.muted.r, Color.muted.g, Color.muted.b, 0.4)
-                  ctx.lineWidth = isMajor ? 1.5 : 1.0
-                  ctx.stroke()
-                }
-
-                // 2. Background Track Ring
-                ctx.beginPath()
-                ctx.arc(cx, cy, radius - 3, 0, 2 * Math.PI)
-                ctx.strokeStyle = Qt.rgba(Color.muted.r, Color.muted.g, Color.muted.b, 0.18)
-                ctx.lineWidth = 2.5
+                // 2. Subtle Background Track Silhouette (Needle Miter Join)
+                drawExactBatarang(ctx, cx, cy, rx, ry)
+                ctx.strokeStyle = Qt.rgba(Color.muted.r, Color.muted.g, Color.muted.b, 0.25)
+                ctx.lineWidth = 1.8
+                ctx.lineJoin = "miter"
+                ctx.miterLimit = 5.0
                 ctx.stroke()
 
-                // 3. Inner Concentric Radar Reticle
-                ctx.beginPath()
-                ctx.arc(cx, cy, radius - 18, 0, 2 * Math.PI)
-                ctx.strokeStyle = (root.hostWidget && root.hostWidget.timerRunning)
-                  ? Qt.rgba(arcColor.r, arcColor.g, arcColor.b, 0.25)
-                  : Qt.rgba(Color.muted.r, Color.muted.g, Color.muted.b, 0.08)
-                ctx.lineWidth = 1.0
-                ctx.stroke()
-
-                // 4. Active Sweeping Progress Arc
+                // 3. Dynamic Progress Glow Tracing the Exact Batarang Perimeter
                 if (progress > 0) {
-                  ctx.beginPath()
-                  var startAngle = -Math.PI / 2
-                  var endAngle = startAngle + (2 * Math.PI * progress)
-                  ctx.arc(cx, cy, radius - 3, startAngle, endAngle, false)
+                  var totalPerimeter = (rx + ry) * 4.4
+                  var dashLength = totalPerimeter * progress
+
+                  ctx.save()
+                  drawExactBatarang(ctx, cx, cy, rx, ry)
+                  ctx.setLineDash([dashLength, totalPerimeter])
+                  ctx.lineDashOffset = 0
                   ctx.strokeStyle = arcColor
-                  ctx.lineWidth = 3.0
-                  ctx.lineCap = "round"
+                  ctx.lineWidth = 2.8
+                  ctx.lineJoin = "miter"
+                  ctx.miterLimit = 5.0
                   ctx.stroke()
+                  ctx.restore()
                 }
               }
 
               Connections {
                 target: root.hostWidget
-                function onTimeRemainingChanged() { sonarCanvas.requestPaint() }
-                function onTimerRunningChanged() { sonarCanvas.requestPaint() }
-                function onTotalDurationChanged() { sonarCanvas.requestPaint() }
+                function onTimeRemainingChanged() { batarangCanvas.requestPaint() }
+                function onTimerRunningChanged() { batarangCanvas.requestPaint() }
+                function onTotalDurationChanged() { batarangCanvas.requestPaint() }
               }
             }
 
-            // Ghost Cowl Watermark in Center
-            BatmanMaskIcon {
-              anchors.centerIn: parent
-              anchors.verticalCenterOffset: Style.space(-14)
-              iconSize: Style.space(64)
-              maskColor: Color.foreground
-              opacity: 0.09
-              active: true
-            }
-
-            // Center Digital Readout
+            // Minimal Center Digital Readout (Inside Batarang Core)
             ColumnLayout {
               anchors.centerIn: parent
+              anchors.verticalCenterOffset: Style.space(4)
               spacing: 0
 
               Text {
@@ -829,168 +833,166 @@ Item {
               Text {
                 Layout.alignment: Qt.AlignHCenter
                 text: {
-                  if (!root.hostWidget) return "PATROL SURVEILLANCE"
-                  if (root.hostWidget.timerMode === -1) return "CUSTOM SPRINT // " + Math.round(root.hostWidget.totalDuration / 60) + "M"
-                  var modes = ["FOCUS SPRINT // 25M", "DEEP SURVEILLANCE // 50M", "TACTICAL REST // 5M", "RECHARGE // 15M"]
-                  return modes[root.hostWidget.timerMode] || "PATROL SURVEILLANCE"
+                  if (!root.hostWidget) return "FOCUS // 25M"
+                  if (root.hostWidget.timerMode === -1) return "CUSTOM // " + Math.round(root.hostWidget.totalDuration / 60) + "M"
+                  var modes = ["FOCUS // 25M", "DEEP WORK // 60M", "REST // 5M", "RECHARGE // 15M"]
+                  return modes[root.hostWidget.timerMode] || ("PATROL // " + Math.round(root.hostWidget.totalDuration / 60) + "M")
                 }
                 textFormat: Text.PlainText
                 font.family: Style.font.family
                 font.pixelSize: 10
                 font.bold: true
-                font.letterSpacing: 1
+                font.letterSpacing: 1.0
                 color: Color.foreground
                 opacity: 0.85
               }
             }
           }
 
-          // Quick Presets
-          RowLayout {
+          // ── Row 1: Unified Tactical Time Bar (Stepper + Presets in 1 Clean Dock) ──
+          Rectangle {
             Layout.fillWidth: true
-            spacing: Style.space(6)
-            Repeater {
-              model: [
-                { label: "15m", mode: 3, mins: 15 },
-                { label: "25m", mode: 0, mins: 25 },
-                { label: "45m", mode: -1, mins: 45 },
-                { label: "60m", mode: 1, mins: 60 }
-              ]
-              delegate: Rectangle {
-                Layout.fillWidth: true
-                height: Style.space(30)
-                radius: Style.space(4)
-                color: (root.hostWidget && (root.hostWidget.timerMode === modelData.mode || Math.round(root.hostWidget.totalDuration / 60) === modelData.mins)) ? Color.accent : Color.background
-                border.color: Color.accent
+            height: Style.space(34)
+            radius: Style.space(4)
+            color: Color.background
+            border.color: Color.muted
+            border.width: 1
+
+            RowLayout {
+              anchors.fill: parent
+              anchors.margins: 2
+              spacing: 2
+
+              // Quick -5m Stepper
+              Rectangle {
+                Layout.preferredWidth: Style.space(38)
+                Layout.fillHeight: true
+                radius: Style.space(3)
+                color: Color.background
+                border.color: Color.muted
                 border.width: 1
 
                 Text {
                   anchors.centerIn: parent
-                  text: modelData.label
+                  text: "-5m"
                   textFormat: Text.PlainText
                   font.family: Style.font.family
-                  font.pixelSize: Style.font.caption
+                  font.pixelSize: 10
                   font.bold: true
-                  color: (root.hostWidget && (root.hostWidget.timerMode === modelData.mode || Math.round(root.hostWidget.totalDuration / 60) === modelData.mins)) ? Color.background : Color.foreground
+                  color: Color.foreground
                 }
                 MouseArea {
                   anchors.fill: parent
                   cursorShape: Qt.PointingHandCursor
-                  onClicked: {
-                    if (root.hostWidget) {
-                      if (modelData.mode >= 0) root.hostWidget.setTimerDuration(modelData.mode)
-                      else root.hostWidget.setCustomMinutes(modelData.mins)
+                  onClicked: if (root.hostWidget) root.hostWidget.adjustMinutes(-5)
+                }
+              }
+
+              // 4 Tactical Preset Chips
+              Repeater {
+                model: [
+                  { label: "15m", mode: 3, mins: 15 },
+                  { label: "25m", mode: 0, mins: 25 },
+                  { label: "45m", mode: -1, mins: 45 },
+                  { label: "60m", mode: 1, mins: 60 }
+                ]
+
+                delegate: Rectangle {
+                  Layout.fillWidth: true
+                  Layout.fillHeight: true
+                  radius: Style.space(3)
+
+                  property bool isSelected: root.hostWidget && (
+                    (modelData.mode >= 0 && root.hostWidget.timerMode === modelData.mode) ||
+                    (modelData.mode === -1 && root.hostWidget.timerMode === -1 && Math.round(root.hostWidget.totalDuration / 60) === modelData.mins)
+                  )
+
+                  color: isSelected ? Color.accent : "transparent"
+
+                  Text {
+                    anchors.centerIn: parent
+                    text: modelData.label
+                    textFormat: Text.PlainText
+                    font.family: Style.font.family
+                    font.pixelSize: 11
+                    font.bold: true
+                    color: parent.isSelected ? Color.background : Color.foreground
+                  }
+
+                  MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                      if (root.hostWidget) {
+                        if (modelData.mode >= 0) root.hostWidget.setTimerDuration(modelData.mode)
+                        else root.hostWidget.setCustomMinutes(modelData.mins)
+                      }
                     }
                   }
                 }
               }
-            }
-          }
 
-          // Custom Duration Adjuster
-          RowLayout {
-            Layout.fillWidth: true
-            spacing: Style.space(6)
+              // Quick +5m Stepper
+              Rectangle {
+                Layout.preferredWidth: Style.space(38)
+                Layout.fillHeight: true
+                radius: Style.space(3)
+                color: Color.background
+                border.color: Color.muted
+                border.width: 1
 
-            Rectangle {
-              height: Style.space(32)
-              implicitWidth: Style.space(76)
-              radius: Style.space(4)
-              color: Color.background
-              border.color: Color.muted
-              border.width: 1
-
-              Text {
-                anchors.centerIn: parent
-                text: "- 5m"
-                textFormat: Text.PlainText
-                font.family: Style.font.family
-                font.pixelSize: Style.font.caption
-                font.bold: true
-                color: Color.foreground
-              }
-              MouseArea {
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                onClicked: if (root.hostWidget) root.hostWidget.adjustMinutes(-5)
-              }
-            }
-
-            Rectangle {
-              Layout.fillWidth: true
-              height: Style.space(32)
-              radius: Style.space(4)
-              color: Color.background
-              border.color: Color.muted
-              border.width: 1
-
-              RowLayout {
-                anchors.centerIn: parent
-                spacing: Style.space(6)
                 Text {
-                  text: "Duration:"
+                  anchors.centerIn: parent
+                  text: "+5m"
                   textFormat: Text.PlainText
                   font.family: Style.font.family
-                  font.pixelSize: Style.font.caption
-                  color: Color.muted
-                }
-                Text {
-                  text: (root.hostWidget ? Math.round(root.hostWidget.totalDuration / 60) : 25) + " min"
-                  textFormat: Text.PlainText
-                  font.family: Style.font.family
-                  font.pixelSize: Style.font.caption
+                  font.pixelSize: 10
                   font.bold: true
-                  color: Color.accent
+                  color: Color.foreground
                 }
-              }
-            }
-
-            Rectangle {
-              height: Style.space(32)
-              implicitWidth: Style.space(76)
-              radius: Style.space(4)
-              color: Color.background
-              border.color: Color.muted
-              border.width: 1
-
-              Text {
-                anchors.centerIn: parent
-                text: "+ 5m"
-                textFormat: Text.PlainText
-                font.family: Style.font.family
-                font.pixelSize: Style.font.caption
-                font.bold: true
-                color: Color.foreground
-              }
-              MouseArea {
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                onClicked: if (root.hostWidget) root.hostWidget.adjustMinutes(5)
+                MouseArea {
+                  anchors.fill: parent
+                  cursorShape: Qt.PointingHandCursor
+                  onClicked: if (root.hostWidget) root.hostWidget.adjustMinutes(5)
+                }
               }
             }
           }
 
-          // Patrol Primary Controls
+          // ── Row 2: Master Tactical Action Trigger (Start/Pause & Reset) ────
           RowLayout {
             Layout.fillWidth: true
             spacing: Style.space(8)
 
             Rectangle {
               Layout.fillWidth: true
-              height: Style.space(38)
+              height: Style.space(40)
               radius: Style.space(4)
               color: (root.hostWidget && (root.hostWidget.timerMode === 2 || root.hostWidget.timerMode === 3)) 
                 ? "#30d158" : Color.accent
 
-              Text {
+              RowLayout {
                 anchors.centerIn: parent
-                text: (root.hostWidget && root.hostWidget.timerRunning) ? "PAUSE PATROL" : "COMMENCE PATROL"
-                textFormat: Text.PlainText
-                font.family: Style.font.family
-                font.bold: true
-                font.pixelSize: Style.font.body
-                color: Color.background
+                spacing: Style.space(8)
+
+                Text {
+                  text: (root.hostWidget && root.hostWidget.timerRunning) ? "⏸" : "▶"
+                  textFormat: Text.PlainText
+                  font.pixelSize: 13
+                  color: Color.background
+                }
+
+                Text {
+                  text: (root.hostWidget && root.hostWidget.timerRunning) ? "PAUSE PATROL" : "COMMENCE PATROL"
+                  textFormat: Text.PlainText
+                  font.family: Style.font.family
+                  font.bold: true
+                  font.pixelSize: Style.font.body
+                  font.letterSpacing: 1.0
+                  color: Color.background
+                }
               }
+
               MouseArea {
                 anchors.fill: parent
                 cursorShape: Qt.PointingHandCursor
@@ -999,21 +1001,28 @@ Item {
             }
 
             Rectangle {
-              height: Style.space(38)
+              height: Style.space(40)
               radius: Style.space(4)
               color: Color.background
               border.color: Color.muted
               border.width: 1
-              implicitWidth: Style.space(90)
+              implicitWidth: Style.space(88)
 
-              Text {
+              RowLayout {
                 anchors.centerIn: parent
-                text: "Reset"
-                textFormat: Text.PlainText
-                font.family: Style.font.family
-                font.pixelSize: Style.font.body
-                color: Color.foreground
+                spacing: Style.space(4)
+
+                Text { text: "↺"; textFormat: Text.PlainText; font.pixelSize: 13; color: Color.foreground }
+                Text {
+                  text: "Reset"
+                  textFormat: Text.PlainText
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.body
+                  font.bold: true
+                  color: Color.foreground
+                }
               }
+
               MouseArea {
                 anchors.fill: parent
                 cursorShape: Qt.PointingHandCursor
@@ -1022,10 +1031,10 @@ Item {
             }
           }
 
-          // Standup Export Button
+          // ── Row 3: Standup Debrief Export ─────────────────────────────────
           Rectangle {
             Layout.fillWidth: true
-            height: Style.space(34)
+            height: Style.space(32)
             radius: Style.space(4)
             color: Color.background
             border.color: Color.accent
