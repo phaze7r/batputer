@@ -117,13 +117,18 @@
 
 | Action | Shortcut / Control |
 | :--- | :--- |
-| **Toggle BatPuter HUD** | Left-Click Bar Icon / `SUPER + B` |
+| **Toggle BatPuter HUD** | Left-Click Bar Icon / Omarchy Bar Slot shortcut (`SUPER + CTRL + 1..9`) |
 | **Start / Pause Patrol Timer** | Right-Click Bar Icon |
 | **Reset Patrol Timer** | Middle-Click Bar Icon |
 | **Adjust Focus Duration** | Click Presets (`15m`, `25m`, `45m`, `60m`) or `[- 5m]` / `[+ 5m]` |
 | **Export Daily Standup** | Click `Export Daily Standup Debrief` in Patrol or Dashboard Tab |
 | **Toggle Bat-Signal Aura** | Click `⚡ Bat-Signal Mode` in Dashboard Tab |
-| **Edit Detective Callsign** | Click `👤 [Callsign]` badge in HUD Header |
+
+> [!TIP]
+> **Custom Hotkeys**: Omarchy lets you toggle bar widgets via their slot number (e.g. `SUPER + CTRL + 1` if BatPuter is in slot 1). If you want a dedicated custom keybind, add this to your `~/.config/hypr/hyprland.conf`:
+> ```ini
+> bind = SUPER, B, exec, omarchy-shell batputer toggle
+> ```
 
 ---
 
