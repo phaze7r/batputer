@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "batputer",
   "name": "BatPuter",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "author": "phaze7r",
   "description": "Gotham-themed tactical productivity HUD for Omarchy with customizable Pomodoro focus, live system telemetry, case files, forensic notes, Alfred comms, and daily standup debrief export.",
   "kinds": ["bar-widget"],
