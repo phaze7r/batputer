@@ -68,7 +68,7 @@ def save_state(key):
     target_path = os.path.join(STATE_DIR, filename)
 
     try:
-        raw = sys.stdin.buffer.read(max_bytes + 1)
+        raw = sys.stdin.buffer.readline(max_bytes + 1)
     except Exception:
         return
 

@@ -128,7 +128,7 @@ Item {
     command: ["python3", root.ioScript, "save", "config"]
     stdinEnabled: true
     onStarted: {
-      write(payload)
+      write(payload + "\n")
       payload = ""
     }
   }
@@ -139,7 +139,7 @@ Item {
     command: ["python3", root.ioScript, "save", "agenda"]
     stdinEnabled: true
     onStarted: {
-      write(payload)
+      write(payload + "\n")
       payload = ""
     }
   }
@@ -150,7 +150,7 @@ Item {
     command: ["python3", root.ioScript, "save", "notes"]
     stdinEnabled: true
     onStarted: {
-      write(payload)
+      write(payload + "\n")
       payload = ""
     }
   }
@@ -161,7 +161,7 @@ Item {
     command: ["wl-copy"]
     stdinEnabled: true
     onStarted: {
-      write(payload)
+      write(payload + "\n")
       payload = ""
     }
   }
@@ -287,7 +287,7 @@ Item {
       streakDays: root.hostWidget ? root.hostWidget.streakDays : 1,
       lastActiveDate: root.hostWidget ? root.hostWidget.lastActiveDate : ""
     })
-    configSaver.payload = JSON.stringify(data, null, 2)
+    configSaver.payload = JSON.stringify(data)
     configSaver.running = true
   }
 
@@ -301,7 +301,7 @@ Item {
     data.activeTab = root.activeNoteTabIndex
     root.notesData = data
 
-    notesSaver.payload = JSON.stringify(data, null, 2)
+    notesSaver.payload = JSON.stringify(data)
     notesSaver.running = true
   }
 
@@ -368,7 +368,7 @@ Item {
 
   function saveMissions(list) {
     var cleanList = Storage.sanitizeAgenda(list)
-    agendaSaver.payload = JSON.stringify(cleanList, null, 2)
+    agendaSaver.payload = JSON.stringify(cleanList)
     agendaSaver.running = true
   }
 

@@ -60,7 +60,7 @@ BarWidget {
     command: ["python3", root.ioScript, "save", "config"]
     stdinEnabled: true
     onStarted: {
-      write(payload)
+      write(payload + "\n")
       payload = ""
     }
   }
@@ -77,7 +77,7 @@ BarWidget {
       streakDays: root.streakDays,
       lastActiveDate: root.lastActiveDate
     })
-    configSaver.payload = JSON.stringify(data, null, 2)
+    configSaver.payload = JSON.stringify(data)
     configSaver.running = true
   }
 
