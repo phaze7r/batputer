@@ -20,7 +20,7 @@ BarWidget {
   property int sessionsCompleted: 0
   property int totalFocusSeconds: 0
   property bool batSignalActive: false
-  property string callSign: "Master Wayne"
+  property string callSign: "Batman"
   property int streakDays: 1
   property string lastActiveDate: ""
 
@@ -28,37 +28,45 @@ BarWidget {
   property bool checkInsEnabled: true
   property int checkInIntervalMinutes: 30
   property int checkInSecondsLeft: 30 * 60
-
   readonly property string home: Quickshell.env("HOME") || ""
   readonly property string batputerDir: home + "/.config/omarchy/batputer"
+  readonly property string ioScript: root.home + "/.config/omarchy/plugins/batputer/bat_io.py"
 
-  FileView {
-    id: configFile
-    path: root.batputerDir + "/config.json"
-    watchChanges: true
-    printErrors: false
-    onLoaded: {
-      var raw = Storage.parseJsonSafe(text(), null, 32768)
-      var d = Storage.sanitizeConfig(raw)
-      root.callSign = d.callSign
-      root.sessionsCompleted = d.sessionsCompleted
-      root.totalFocusSeconds = d.totalFocusSeconds
-      root.streakDays = d.streakDays
-      root.lastActiveDate = d.lastActiveDate
-      root.checkStreak()
+  // Secure Bounded Descriptor Reader (O_NOFOLLOW | O_NONBLOCK descriptor level)
+  Process {
+    id: configLoader
+    command: ["python3", root.ioScript, "read", "config", "32768"]
+    stdout: StdioCollector {
+      onTextChanged: {
+        var t = text.trim()
+        if (t.length > 0) {
+          var raw = Storage.parseJsonSafe(t, null, 32768)
+          var d = Storage.sanitizeConfig(raw)
+          root.callSign = d.callSign
+          root.sessionsCompleted = d.sessionsCompleted
+          root.totalFocusSeconds = d.totalFocusSeconds
+          root.streakDays = d.streakDays
+          root.lastActiveDate = d.lastActiveDate
+          root.checkStreak()
+        }
+      }
     }
   }
 
-  // Secure Process Writer (Passes data over stdin, never in process argv)
+  // Secure Atomic Writer (Exclusive mode-0600 sibling file + atomic replacement)
   Process {
     id: configSaver
     property string payload: ""
-    command: ["tee", root.batputerDir + "/config.json"]
+    command: ["python3", root.ioScript, "save", "config"]
     stdinEnabled: true
     onStarted: {
       write(payload)
       payload = ""
     }
+  }
+
+  Component.onCompleted: {
+    configLoader.running = true
   }
 
   function saveConfig() {
@@ -128,26 +136,21 @@ BarWidget {
   }
 
   function sendNotification(title, message, urgencyLevel) {
-    var isLight = false
-    try {
-      var bg = Color.background
-      var bgCol = Qt.color(bg)
-      var bgLum = 0.299 * bgCol.r + 0.587 * bgCol.g + 0.114 * bgCol.b
-      isLight = (bgLum >= 0.5)
-    } catch(e) {}
-    var iconName = isLight ? "batman_black.png" : "batman_white.png"
+    var isLightTheme = Color.background && ((Color.background.r * 0.299 + Color.background.g * 0.587 + Color.background.b * 0.114) > 0.5)
+    var iconName = isLightTheme ? "batman_black.png" : "batman_white.png"
     var iconPath = root.home + "/.config/omarchy/plugins/batputer/assets/" + iconName
-
     var args = [
       "omarchy-notification-send",
       "--app-name", "BatPuter",
       "-i", iconPath,
-      "-g", "🦇",
-      title,
-      message
+      "--image", iconPath
     ]
     if (urgencyLevel) {
       args.push("-u", urgencyLevel)
+    }
+    args.push(title)
+    if (message) {
+      args.push(message)
     }
     Quickshell.execDetached(args)
   }

@@ -163,14 +163,16 @@ omarchy-shell batputer checkIn
 
 ```
 batputer/
-├── manifest.json         # Omarchy Quattro Plugin Manifest (v3.0.0)
+├── manifest.json         # Omarchy Quattro Plugin Manifest (v3.1.0)
 ├── BarWidget.qml         # Bar integration, radial progress ring, IPC handlers
 ├── Panel.qml             # Tactical Operations HUD, Telemetry, Cases, Notes, Alfred
 ├── BatmanMaskIcon.qml    # Theme-aware cowl icon with Bat-Signal searchlight halo
 ├── Storage.js            # Telemetry, speed formatting, rank calculations & debrief exporter
+├── bat_io.py             # Secure, bounded, no-follow state descriptor I/O (mode 0600)
 ├── LICENSE               # MIT License
 ├── README.md             # Documentation & showcase
 └── assets/
+    ├── batarang.svg      # Vector Dark Knight Batarang blueprint
     ├── bat_finish.wav    # Cinematic Wayne Tech chime
     ├── batman_white.png  # Solid white cowl silhouette
     ├── batman_black.png  # Solid black cowl silhouette

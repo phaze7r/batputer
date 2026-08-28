@@ -46,8 +46,7 @@ Item {
   readonly property string batputerDir: home + "/.config/omarchy/batputer"
 
   // User & Configuration State
-  property string callSign: "Master Wayne"
-  property bool editingCallSign: false
+  property string callSign: "Batman"
   property string customMinsInput: "30"
 
   // Live Telemetry properties
@@ -71,11 +70,62 @@ Item {
   property string newMissionTitle: ""
   property string newMissionPriority: "alpha"
 
-  // Secure File & Clipboard Process Writers (Data streams over stdin, never in process argv)
+  readonly property string ioScript: root.home + "/.config/omarchy/plugins/batputer/bat_io.py"
+
+  // Secure Bounded Descriptor State Readers (O_NOFOLLOW | O_NONBLOCK)
+  Process {
+    id: configLoader
+    command: ["python3", root.ioScript, "read", "config", "32768"]
+    stdout: StdioCollector {
+      onTextChanged: {
+        var t = text.trim()
+        if (t.length > 0) {
+          var raw = Storage.parseJsonSafe(t, null, 32768)
+          var d = Storage.sanitizeConfig(raw)
+          if (d && d.callSign) root.callSign = d.callSign
+        }
+      }
+    }
+  }
+
+  Process {
+    id: agendaLoader
+    command: ["python3", root.ioScript, "read", "agenda", "65536"]
+    stdout: StdioCollector {
+      onTextChanged: {
+        var t = text.trim()
+        if (t.length > 0) {
+          var raw = Storage.parseJsonSafe(t, [], 65536)
+          root.agendaList = Storage.sanitizeAgenda(raw)
+        }
+      }
+    }
+  }
+
+  Process {
+    id: notesLoader
+    command: ["python3", root.ioScript, "read", "notes", "131072"]
+    stdout: StdioCollector {
+      onTextChanged: {
+        var t = text.trim()
+        if (t.length > 0) {
+          var raw = Storage.parseJsonSafe(t, null, 131072)
+          var data = Storage.sanitizeNotes(raw)
+          root.notesData = data
+          root.activeNoteTabIndex = Math.min(Math.max(0, data.activeTab || 0), data.tabs.length - 1)
+          if (noteArea && data.tabs[root.activeNoteTabIndex]) {
+            noteArea.text = data.tabs[root.activeNoteTabIndex].content || ""
+          }
+        }
+      }
+    }
+  }
+
+  // Secure Atomic State Writers (Exclusive mode-0600 sibling file + atomic replacement)
   Process {
     id: configSaver
     property string payload: ""
-    command: ["tee", root.batputerDir + "/config.json"]
+    command: ["python3", root.ioScript, "save", "config"]
     stdinEnabled: true
     onStarted: {
       write(payload)
@@ -86,7 +136,7 @@ Item {
   Process {
     id: agendaSaver
     property string payload: ""
-    command: ["tee", root.batputerDir + "/agenda.json"]
+    command: ["python3", root.ioScript, "save", "agenda"]
     stdinEnabled: true
     onStarted: {
       write(payload)
@@ -97,7 +147,7 @@ Item {
   Process {
     id: notesSaver
     property string payload: ""
-    command: ["tee", root.batputerDir + "/notes.json"]
+    command: ["python3", root.ioScript, "save", "notes"]
     stdinEnabled: true
     onStarted: {
       write(payload)
@@ -116,7 +166,21 @@ Item {
     }
   }
 
-  // Telemetry FileViews
+  // Telemetry: Direct df Process without temporary file
+  Process {
+    id: diskProc
+    command: ["df", "-h", "/"]
+    stdout: SplitParser {
+      onRead: function(line) {
+        var parts = line.trim().split(/\s+/)
+        if (parts.length >= 5 && parts[0] !== "Filesystem") {
+          root.diskUsage = (parts[2] + "/" + parts[1]).substring(0, 20)
+        }
+      }
+    }
+  }
+
+  // Telemetry FileViews (Standard system /proc endpoints)
   FileView {
     id: loadFile
     path: "/proc/loadavg"
@@ -148,17 +212,6 @@ Item {
   }
 
   FileView {
-    id: diskFile
-    path: "/tmp/batputer_disk"
-    watchChanges: true
-    printErrors: false
-    onLoaded: {
-      var t = text().trim()
-      if (t) root.diskUsage = t.substring(0, 20)
-    }
-  }
-
-  FileView {
     id: netFile
     path: "/proc/net/dev"
     watchChanges: true
@@ -168,42 +221,13 @@ Item {
     }
   }
 
-  FileView {
-    id: configFile
-    path: root.batputerDir + "/config.json"
-    watchChanges: true
-    printErrors: false
-    onLoaded: {
-      var raw = Storage.parseJsonSafe(text(), null, 32768)
-      var d = Storage.sanitizeConfig(raw)
-      if (d && d.callSign) root.callSign = d.callSign
-    }
+  Component.onCompleted: {
+    root.refreshData()
   }
 
-  FileView {
-    id: agendaFile
-    path: root.batputerDir + "/agenda.json"
-    watchChanges: true
-    printErrors: false
-    onLoaded: {
-      var raw = Storage.parseJsonSafe(text(), [], 65536)
-      root.agendaList = Storage.sanitizeAgenda(raw)
-    }
-  }
-
-  FileView {
-    id: notesFile
-    path: root.batputerDir + "/notes.json"
-    watchChanges: true
-    printErrors: false
-    onLoaded: {
-      var raw = Storage.parseJsonSafe(text(), null, 131072)
-      var data = Storage.sanitizeNotes(raw)
-      root.notesData = data
-      root.activeNoteTabIndex = Math.min(Math.max(0, data.activeTab || 0), data.tabs.length - 1)
-      if (noteArea && data.tabs[root.activeNoteTabIndex]) {
-        noteArea.text = data.tabs[root.activeNoteTabIndex].content || ""
-      }
+  onOpenedChanged: {
+    if (root.opened) {
+      root.refreshData()
     }
   }
 
@@ -215,15 +239,8 @@ Item {
       loadFile.reload()
       memFile.reload()
       netFile.reload()
-      root.updateDisk()
+      diskProc.running = true
     }
-  }
-
-  function updateDisk() {
-    Quickshell.execDetached(["bash", "-c",
-      "df -h / | awk 'NR==2 {print $3 \"/\" $2}' > /tmp/batputer_disk"
-    ])
-    diskFile.reload()
   }
 
   function updateNetStats(text) {
@@ -253,11 +270,10 @@ Item {
   }
 
   function refreshData() {
-    Quickshell.execDetached(["mkdir", "-p", root.batputerDir])
-    updateDisk()
-    configFile.reload()
-    agendaFile.reload()
-    notesFile.reload()
+    diskProc.running = true
+    configLoader.running = true
+    agendaLoader.running = true
+    notesLoader.running = true
     loadFile.reload()
     memFile.reload()
     netFile.reload()
@@ -329,21 +345,15 @@ Item {
   }
 
   function sendNotification(title, message) {
-    var isLight = false
-    try {
-      var bg = Color.background
-      var bgCol = Qt.color(bg)
-      var bgLum = 0.299 * bgCol.r + 0.587 * bgCol.g + 0.114 * bgCol.b
-      isLight = (bgLum >= 0.5)
-    } catch(e) {}
-    var iconName = isLight ? "batman_black.png" : "batman_white.png"
+    var isLightTheme = Color.background && ((Color.background.r * 0.299 + Color.background.g * 0.587 + Color.background.b * 0.114) > 0.5)
+    var iconName = isLightTheme ? "batman_black.png" : "batman_white.png"
     var iconPath = root.home + "/.config/omarchy/plugins/batputer/assets/" + iconName
 
     Quickshell.execDetached([
       "omarchy-notification-send",
       "--app-name", "BatPuter",
       "-i", iconPath,
-      "-g", "🦇",
+      "--image", iconPath,
       title,
       message
     ])
@@ -486,18 +496,12 @@ Item {
               Text {
                 id: callSignTxt
                 anchors.centerIn: parent
-                text: root.callSign
+                text: "🦇 " + root.callSign
                 textFormat: Text.PlainText
                 font.family: Style.font.family
                 font.pixelSize: Style.font.caption
                 font.bold: true
                 color: Color.accent
-              }
-
-              MouseArea {
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                onClicked: root.editingCallSign = !root.editingCallSign
               }
             }
 
@@ -536,74 +540,6 @@ Item {
         }
 
         Item { Layout.fillWidth: true }
-      }
-
-      // Callsign In-line Editor Row
-      RowLayout {
-        visible: root.editingCallSign
-        Layout.fillWidth: true
-        spacing: Style.space(6)
-
-        Text {
-          text: "Detective Callsign:"
-          textFormat: Text.PlainText
-          font.family: Style.font.family
-          font.pixelSize: Style.font.bodySmall
-          font.bold: true
-          color: Color.foreground
-        }
-
-        TextField {
-          id: callSignInput
-          Layout.fillWidth: true
-          text: root.callSign
-          placeholderText: "e.g. Master Wayne, The Detective, Bruce..."
-          font.family: Style.font.family
-          font.pixelSize: Style.font.body
-          color: Color.foreground
-          maximumLength: 32
-          background: Rectangle {
-            radius: Style.space(4)
-            color: Color.background
-            border.color: Color.accent
-            border.width: 1
-          }
-          onAccepted: {
-            if (text.trim() !== "") {
-              root.callSign = text.trim().substring(0, 32)
-              root.saveConfig()
-            }
-            root.editingCallSign = false
-          }
-        }
-
-        Rectangle {
-          height: Style.space(30)
-          implicitWidth: Style.space(60)
-          radius: Style.space(4)
-          color: Color.accent
-
-          Text {
-            anchors.centerIn: parent
-            text: "Save"
-            textFormat: Text.PlainText
-            font.family: Style.font.family
-            font.pixelSize: Style.font.caption
-            font.bold: true
-            color: Color.background
-          }
-          MouseArea {
-            anchors.fill: parent
-            cursorShape: Qt.PointingHandCursor
-            onClicked: {
-              if (callSignInput.text.trim() !== "") {
-                root.callSign = callSignInput.text.trim().substring(0, 32)
-                root.saveConfig()
-              }
-              root.editingCallSign = false
-            }
-          }
-        }
       }
 
       // ── High-Contrast Batcave Telemetry HUD (CPU, RAM, DISK, NET) ─────────
@@ -1757,7 +1693,7 @@ Item {
                 anchors.fill: parent
                 cursorShape: Qt.PointingHandCursor
                 onClicked: {
-                  Quickshell.execDetached(["bash", "-c", "pactl set-sink-mute @DEFAULT_SINK@ toggle"])
+                  Quickshell.execDetached(["pactl", "set-sink-mute", "@DEFAULT_SINK@", "toggle"])
                   root.close()
                 }
               }

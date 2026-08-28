@@ -44,8 +44,8 @@ function parseJsonSafe(text, fallback, maxBytes) {
 // Strict Bounded Config Sanitizer
 function sanitizeConfig(raw) {
   if (!raw || typeof raw !== "object") raw = {};
-  var callSign = typeof raw.callSign === "string" ? raw.callSign.trim().substring(0, 32) : "Master Wayne";
-  if (!callSign) callSign = "Master Wayne";
+  var callSign = typeof raw.callSign === "string" ? raw.callSign.trim().substring(0, 32) : "Batman";
+  if (!callSign) callSign = "Batman";
   return {
     callSign: callSign,
     sessionsCompleted: Math.max(0, Math.min(100000, parseInt(raw.sessionsCompleted) || 0)),
@@ -153,7 +153,7 @@ function getDetectiveRank(sessions) {
 }
 
 function getNextCheckInPrompt(callSign) {
-  var name = (callSign || "Master Wayne").substring(0, 32);
+  var name = (callSign || "Batman").substring(0, 32);
   var prompts = [
     "Status report, " + name + ". Gotham surveillance telemetry is active. What is your primary objective?",
     "Alfred here. The Batcave computer has compiled forensic data. Do you require tactical analysis, " + name + "?",
@@ -167,7 +167,7 @@ function getNextCheckInPrompt(callSign) {
 
 function generateDebriefReport(callSign, sessions, focusSeconds, streak, agendaList, notesData) {
   var today = new Date().toISOString().split("T")[0];
-  var safeCallSign = (callSign || "Master Wayne").substring(0, 32);
+  var safeCallSign = (callSign || "Batman").substring(0, 32);
   var rank = getDetectiveRank(sessions);
   var totalTime = formatDuration(focusSeconds);
   
