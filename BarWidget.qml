@@ -30,43 +30,38 @@ BarWidget {
   property int checkInSecondsLeft: 30 * 60
   readonly property string home: Quickshell.env("HOME") || ""
   readonly property string batputerDir: home + "/.config/omarchy/batputer"
-  readonly property string ioScript: root.home + "/.config/omarchy/plugins/batputer/bat_io.py"
+  readonly property string configPath: root.batputerDir + "/config.json"
 
-  // Secure Bounded Descriptor Reader (O_NOFOLLOW | O_NONBLOCK descriptor level)
   Process {
-    id: configLoader
-    command: ["python3", root.ioScript, "read", "config", "32768"]
-    stdout: StdioCollector {
-      onTextChanged: {
-        var t = text.trim()
-        if (t.length > 0) {
-          var raw = Storage.parseJsonSafe(t, null, 32768)
-          var d = Storage.sanitizeConfig(raw)
-          root.callSign = d.callSign
-          root.sessionsCompleted = d.sessionsCompleted
-          root.totalFocusSeconds = d.totalFocusSeconds
-          root.streakDays = d.streakDays
-          root.lastActiveDate = d.lastActiveDate
-          root.checkStreak()
-        }
-      }
-    }
+    id: ensureDir
+    command: ["mkdir", "-p", "-m", "700", root.batputerDir]
+    running: false
+    onExited: configFile.reload()
   }
 
-  // Secure Atomic Writer (Exclusive mode-0600 sibling file + atomic replacement)
-  Process {
-    id: configSaver
-    property string payload: ""
-    command: ["python3", root.ioScript, "save", "config"]
-    stdinEnabled: true
-    onStarted: {
-      write(payload + "\n")
-      payload = ""
+  // Config persistence via the shell's native atomic file writer (temp + rename)
+  // — the same primitive omarchy-shell uses for shell.json / notification
+  // settings. This plugin is the only writer, so watchChanges stays off.
+  FileView {
+    id: configFile
+    path: root.configPath
+    watchChanges: false
+    atomicWrites: true
+    printErrors: false
+    onLoaded: {
+      var d = Storage.sanitizeConfig(Storage.parseJsonSafe(text(), null, 32768))
+      root.callSign = d.callSign
+      root.sessionsCompleted = d.sessionsCompleted
+      root.totalFocusSeconds = d.totalFocusSeconds
+      root.streakDays = d.streakDays
+      root.lastActiveDate = d.lastActiveDate
+      root.checkStreak()
     }
+    onLoadFailed: root.checkStreak()
   }
 
   Component.onCompleted: {
-    configLoader.running = true
+    ensureDir.running = true
   }
 
   function saveConfig() {
@@ -77,8 +72,7 @@ BarWidget {
       streakDays: root.streakDays,
       lastActiveDate: root.lastActiveDate
     })
-    configSaver.payload = JSON.stringify(data)
-    configSaver.running = true
+    configFile.setText(JSON.stringify(data) + "\n")
   }
 
   function checkStreak() {

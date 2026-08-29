@@ -45,8 +45,8 @@ Item {
   readonly property string home: Quickshell.env("HOME") || ""
   readonly property string batputerDir: home + "/.config/omarchy/batputer"
 
-  // User & Configuration State
-  property string callSign: "Batman"
+  // User & Configuration State (config is owned by the host BarWidget)
+  readonly property string callSign: (root.hostWidget && root.hostWidget.callSign) ? root.hostWidget.callSign : "Batman"
   property string customMinsInput: "30"
 
   // Live Telemetry properties
@@ -70,88 +70,45 @@ Item {
   property string newMissionTitle: ""
   property string newMissionPriority: "alpha"
 
-  readonly property string ioScript: root.home + "/.config/omarchy/plugins/batputer/bat_io.py"
+  readonly property string agendaPath: root.batputerDir + "/agenda.json"
+  readonly property string notesPath: root.batputerDir + "/notes.json"
 
-  // Secure Bounded Descriptor State Readers (O_NOFOLLOW | O_NONBLOCK)
   Process {
-    id: configLoader
-    command: ["python3", root.ioScript, "read", "config", "32768"]
-    stdout: StdioCollector {
-      onTextChanged: {
-        var t = text.trim()
-        if (t.length > 0) {
-          var raw = Storage.parseJsonSafe(t, null, 32768)
-          var d = Storage.sanitizeConfig(raw)
-          if (d && d.callSign) root.callSign = d.callSign
-        }
-      }
-    }
+    id: ensureDir
+    command: ["mkdir", "-p", "-m", "700", root.batputerDir]
+    running: false
+    onExited: { agendaFile.reload(); notesFile.reload() }
   }
 
-  Process {
-    id: agendaLoader
-    command: ["python3", root.ioScript, "read", "agenda", "65536"]
-    stdout: StdioCollector {
-      onTextChanged: {
-        var t = text.trim()
-        if (t.length > 0) {
-          var raw = Storage.parseJsonSafe(t, [], 65536)
-          root.agendaList = Storage.sanitizeAgenda(raw)
-        }
-      }
-    }
+  // State persistence via the shell's native atomic file writer (temp + rename),
+  // the same primitive omarchy-shell uses for its own settings. This plugin is
+  // the only writer, so watchChanges stays off — no reload feedback loop, and
+  // no cursor jump while a note is being edited.
+  FileView {
+    id: agendaFile
+    path: root.agendaPath
+    watchChanges: false
+    atomicWrites: true
+    printErrors: false
+    onLoaded: root.agendaList = Storage.sanitizeAgenda(Storage.parseJsonSafe(text(), [], 65536))
+    onLoadFailed: root.agendaList = []
   }
 
-  Process {
-    id: notesLoader
-    command: ["python3", root.ioScript, "read", "notes", "131072"]
-    stdout: StdioCollector {
-      onTextChanged: {
-        var t = text.trim()
-        if (t.length > 0) {
-          var raw = Storage.parseJsonSafe(t, null, 131072)
-          var data = Storage.sanitizeNotes(raw)
-          root.notesData = data
-          root.activeNoteTabIndex = Math.min(Math.max(0, data.activeTab || 0), data.tabs.length - 1)
-          if (noteArea && data.tabs[root.activeNoteTabIndex]) {
-            noteArea.text = data.tabs[root.activeNoteTabIndex].content || ""
-          }
-        }
-      }
-    }
+  FileView {
+    id: notesFile
+    path: root.notesPath
+    watchChanges: false
+    atomicWrites: true
+    printErrors: false
+    onLoaded: root.applyNotes(Storage.sanitizeNotes(Storage.parseJsonSafe(text(), null, 131072)))
+    onLoadFailed: root.applyNotes(Storage.sanitizeNotes(null))
   }
 
-  // Secure Atomic State Writers (Exclusive mode-0600 sibling file + atomic replacement)
-  Process {
-    id: configSaver
-    property string payload: ""
-    command: ["python3", root.ioScript, "save", "config"]
-    stdinEnabled: true
-    onStarted: {
-      write(payload + "\n")
-      payload = ""
-    }
-  }
-
-  Process {
-    id: agendaSaver
-    property string payload: ""
-    command: ["python3", root.ioScript, "save", "agenda"]
-    stdinEnabled: true
-    onStarted: {
-      write(payload + "\n")
-      payload = ""
-    }
-  }
-
-  Process {
-    id: notesSaver
-    property string payload: ""
-    command: ["python3", root.ioScript, "save", "notes"]
-    stdinEnabled: true
-    onStarted: {
-      write(payload + "\n")
-      payload = ""
+  function applyNotes(data) {
+    root.notesData = data
+    root.activeNoteTabIndex = Math.min(Math.max(0, data.activeTab || 0), data.tabs.length - 1)
+    if (noteArea && data.tabs[root.activeNoteTabIndex]) {
+      noteArea.text = data.tabs[root.activeNoteTabIndex].content || ""
     }
   }
 
@@ -222,6 +179,7 @@ Item {
   }
 
   Component.onCompleted: {
+    ensureDir.running = true
     root.refreshData()
   }
 
@@ -271,24 +229,11 @@ Item {
 
   function refreshData() {
     diskProc.running = true
-    configLoader.running = true
-    agendaLoader.running = true
-    notesLoader.running = true
+    agendaFile.reload()
+    notesFile.reload()
     loadFile.reload()
     memFile.reload()
     netFile.reload()
-  }
-
-  function saveConfig() {
-    var data = Storage.sanitizeConfig({
-      callSign: root.callSign,
-      sessionsCompleted: root.hostWidget ? root.hostWidget.sessionsCompleted : 0,
-      totalFocusSeconds: root.hostWidget ? root.hostWidget.totalFocusSeconds : 0,
-      streakDays: root.hostWidget ? root.hostWidget.streakDays : 1,
-      lastActiveDate: root.hostWidget ? root.hostWidget.lastActiveDate : ""
-    })
-    configSaver.payload = JSON.stringify(data)
-    configSaver.running = true
   }
 
   function saveCurrentNote() {
@@ -301,8 +246,7 @@ Item {
     data.activeTab = root.activeNoteTabIndex
     root.notesData = data
 
-    notesSaver.payload = JSON.stringify(data)
-    notesSaver.running = true
+    notesFile.setText(JSON.stringify(data) + "\n")
   }
 
   function switchNoteTab(idx) {
@@ -368,8 +312,8 @@ Item {
 
   function saveMissions(list) {
     var cleanList = Storage.sanitizeAgenda(list)
-    agendaSaver.payload = JSON.stringify(cleanList)
-    agendaSaver.running = true
+    root.agendaList = cleanList
+    agendaFile.setText(JSON.stringify(cleanList) + "\n")
   }
 
   function promoteNoteToCase() {

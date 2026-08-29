@@ -55,7 +55,7 @@
 * **🎛 Unified Tactical Control Dock**: Consolidated presets and steppers into an ultra-clean, ergonomic 2-row control system (`[-5m]` `[15m]` `[25m]` `[45m]` `[60m]` `[+5m]` + Primary Action Trigger).
 * **🔔 Synthesized Wayne Tech Chime**: Upgraded alert sound to a rich, high-gain 3-tone chime sequence with PipeWire (`pw-play`) and PulseAudio (`paplay`) fallbacks.
 * **🌓 Theme-Adaptive Desktop Notifications**: Dynamic contrast detection for desktop toasts (uses pure black cowl icon on light themes and crisp white cowl icon on dark themes).
-* **🛡 Security & Marketplace Compliance**: 100% compliant with Omarchy security guidelines (safe JSON deserialization, PlainText enforcement, and secure process stdin streaming).
+* **🛡 Security & Marketplace Compliance**: Bounded, sanitized JSON deserialization, `Text.PlainText` enforcement everywhere, and state persistence through the shell's native atomic file writer (`FileView` / temp-write + rename) — no subprocess I/O.
 
 ---
 
@@ -173,7 +173,6 @@ batputer/
 ├── Panel.qml             # Tactical Operations HUD, Telemetry, Cases, Notes, Alfred
 ├── BatmanMaskIcon.qml    # Theme-aware cowl icon with Bat-Signal searchlight halo
 ├── Storage.js            # Telemetry, speed formatting, rank calculations & debrief exporter
-├── bat_io.py             # Secure, bounded, no-follow state descriptor I/O (mode 0600)
 ├── LICENSE               # MIT License
 ├── README.md             # Documentation & showcase
 └── assets/
