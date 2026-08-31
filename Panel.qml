@@ -72,26 +72,28 @@ Item {
 
   readonly property string agendaPath: root.batputerDir + "/agenda.json"
   readonly property string notesPath: root.batputerDir + "/notes.json"
+  readonly property string ioScript: root.home + "/.config/omarchy/plugins/batputer/bat_read.py"
 
   Process {
     id: ensureDir
     command: ["mkdir", "-p", "-m", "700", root.batputerDir]
     running: false
-    onExited: { agendaFile.reload(); notesFile.reload() }
+    onExited: { agendaReader.running = true; notesReader.running = true }
   }
 
-  // State persistence via the shell's native atomic file writer (temp + rename),
-  // the same primitive omarchy-shell uses for its own settings. This plugin is
-  // the only writer, so watchChanges stays off — no reload feedback loop, and
-  // no cursor jump while a note is being edited.
+  // Writes: the shell's native atomic file writer (temp + rename), the same
+  // primitive omarchy-shell uses for its own settings. preload:false + never
+  // calling text() keeps these write-only — no unbounded read into the shell.
+  // Reads: bat_read.py, a bounded O_NOFOLLOW|O_NONBLOCK descriptor helper that
+  // fstat-checks for a regular file and rejects anything over the byte cap, so
+  // a swapped symlink / FIFO / oversized file can't reach the parser.
   FileView {
     id: agendaFile
     path: root.agendaPath
     watchChanges: false
     atomicWrites: true
     printErrors: false
-    onLoaded: root.agendaList = Storage.sanitizeAgenda(Storage.parseJsonSafe(text(), [], 65536))
-    onLoadFailed: root.agendaList = []
+    preload: false
   }
 
   FileView {
@@ -100,8 +102,23 @@ Item {
     watchChanges: false
     atomicWrites: true
     printErrors: false
-    onLoaded: root.applyNotes(Storage.sanitizeNotes(Storage.parseJsonSafe(text(), null, 131072)))
-    onLoadFailed: root.applyNotes(Storage.sanitizeNotes(null))
+    preload: false
+  }
+
+  Process {
+    id: agendaReader
+    command: ["python3", root.ioScript, root.agendaPath, "65536"]
+    stdout: StdioCollector {
+      onStreamFinished: root.agendaList = Storage.sanitizeAgenda(Storage.parseJsonSafe(text, [], 65536))
+    }
+  }
+
+  Process {
+    id: notesReader
+    command: ["python3", root.ioScript, root.notesPath, "131072"]
+    stdout: StdioCollector {
+      onStreamFinished: root.applyNotes(Storage.sanitizeNotes(Storage.parseJsonSafe(text, null, 131072)))
+    }
   }
 
   function applyNotes(data) {
@@ -229,8 +246,8 @@ Item {
 
   function refreshData() {
     diskProc.running = true
-    agendaFile.reload()
-    notesFile.reload()
+    agendaReader.running = true
+    notesReader.running = true
     loadFile.reload()
     memFile.reload()
     netFile.reload()
@@ -1236,12 +1253,21 @@ Item {
             font.pixelSize: Style.font.body
             color: Color.foreground
             wrapMode: TextEdit.WordWrap
+            onTextChanged: noteSaveTimer.restart()
             background: Rectangle {
               radius: Style.space(4)
               color: Color.background
               border.color: Color.muted
               border.width: 1
             }
+          }
+
+          // Debounced autosave (same pattern omarchy's notifications plugin
+          // uses to flush its settings). Notes also save on tab switch / close.
+          Timer {
+            id: noteSaveTimer
+            interval: 400
+            onTriggered: root.saveCurrentNote()
           }
 
           RowLayout {
@@ -1280,28 +1306,6 @@ Item {
                 anchors.fill: parent
                 cursorShape: Qt.PointingHandCursor
                 onClicked: root.promoteNoteToCase()
-              }
-            }
-
-            Rectangle {
-              height: Style.space(32)
-              radius: Style.space(4)
-              color: Color.accent
-              implicitWidth: Style.space(100)
-
-              Text {
-                anchors.centerIn: parent
-                text: "Save Note"
-                textFormat: Text.PlainText
-                font.family: Style.font.family
-                font.pixelSize: Style.font.caption
-                font.bold: true
-                color: Color.background
-              }
-              MouseArea {
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                onClicked: root.saveCurrentNote()
               }
             }
           }

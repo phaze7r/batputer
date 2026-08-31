@@ -31,33 +31,43 @@ BarWidget {
   readonly property string home: Quickshell.env("HOME") || ""
   readonly property string batputerDir: home + "/.config/omarchy/batputer"
   readonly property string configPath: root.batputerDir + "/config.json"
+  readonly property string ioScript: root.home + "/.config/omarchy/plugins/batputer/bat_read.py"
 
   Process {
     id: ensureDir
     command: ["mkdir", "-p", "-m", "700", root.batputerDir]
     running: false
-    onExited: configFile.reload()
+    onExited: configReader.running = true
   }
 
-  // Config persistence via the shell's native atomic file writer (temp + rename)
-  // — the same primitive omarchy-shell uses for shell.json / notification
-  // settings. This plugin is the only writer, so watchChanges stays off.
+  // Writes go through the shell's native atomic writer (temp + rename), the same
+  // primitive omarchy-shell uses for shell.json. preload:false + no text() call
+  // keeps this write-only. Reads go through bat_read.py — a bounded
+  // O_NOFOLLOW|O_NONBLOCK descriptor helper that fstat-checks for a regular file
+  // and rejects anything past the byte cap.
   FileView {
     id: configFile
     path: root.configPath
     watchChanges: false
     atomicWrites: true
     printErrors: false
-    onLoaded: {
-      var d = Storage.sanitizeConfig(Storage.parseJsonSafe(text(), null, 32768))
-      root.callSign = d.callSign
-      root.sessionsCompleted = d.sessionsCompleted
-      root.totalFocusSeconds = d.totalFocusSeconds
-      root.streakDays = d.streakDays
-      root.lastActiveDate = d.lastActiveDate
-      root.checkStreak()
+    preload: false
+  }
+
+  Process {
+    id: configReader
+    command: ["python3", root.ioScript, root.configPath, "32768"]
+    stdout: StdioCollector {
+      onStreamFinished: {
+        var d = Storage.sanitizeConfig(Storage.parseJsonSafe(text, null, 32768))
+        root.callSign = d.callSign
+        root.sessionsCompleted = d.sessionsCompleted
+        root.totalFocusSeconds = d.totalFocusSeconds
+        root.streakDays = d.streakDays
+        root.lastActiveDate = d.lastActiveDate
+        root.checkStreak()
+      }
     }
-    onLoadFailed: root.checkStreak()
   }
 
   Component.onCompleted: {
