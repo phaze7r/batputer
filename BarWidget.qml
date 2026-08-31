@@ -40,11 +40,7 @@ BarWidget {
     onExited: configReader.running = true
   }
 
-  // Writes go through the shell's native atomic writer (temp + rename), the same
-  // primitive omarchy-shell uses for shell.json. preload:false + no text() call
-  // keeps this write-only. Reads go through bat_read.py — a bounded
-  // O_NOFOLLOW|O_NONBLOCK descriptor helper that fstat-checks for a regular file
-  // and rejects anything past the byte cap.
+  // Writes: native atomic writer. Reads: bat_read.py (bounded, O_NOFOLLOW).
   FileView {
     id: configFile
     path: root.configPath

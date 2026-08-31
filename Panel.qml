@@ -81,12 +81,7 @@ Item {
     onExited: { agendaReader.running = true; notesReader.running = true }
   }
 
-  // Writes: the shell's native atomic file writer (temp + rename), the same
-  // primitive omarchy-shell uses for its own settings. preload:false + never
-  // calling text() keeps these write-only — no unbounded read into the shell.
-  // Reads: bat_read.py, a bounded O_NOFOLLOW|O_NONBLOCK descriptor helper that
-  // fstat-checks for a regular file and rejects anything over the byte cap, so
-  // a swapped symlink / FIFO / oversized file can't reach the parser.
+  // Writes: native atomic writer. Reads: bat_read.py (bounded, O_NOFOLLOW).
   FileView {
     id: agendaFile
     path: root.agendaPath

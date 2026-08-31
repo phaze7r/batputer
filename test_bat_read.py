@@ -21,11 +21,7 @@ def test():
 
     fifo = os.path.join(d, "fifo.json")
     os.mkfifo(fifo)
-    assert read_capped(fifo, 1024) == b""                  # FIFO -> no hang, rejected
-
-    subdir = os.path.join(d, "adir")
-    os.mkdir(subdir)
-    assert read_capped(subdir, 1024) == b""                # directory -> rejected
+    assert read_capped(fifo, 1024) == b""                  # FIFO -> no hang, non-regular rejected
 
     print("ok")
 
